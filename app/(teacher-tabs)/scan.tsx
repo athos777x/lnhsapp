@@ -1,7 +1,10 @@
-import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard } from 'react-native';
+import React, { useLayoutEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard, SafeAreaView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Camera } from 'expo-camera';
+import { BarCodeScanner } from 'expo-barcode-scanner';
+import { useNavigation } from '@react-navigation/native';
 
 
 type StudentInfo = {
@@ -48,7 +51,7 @@ const TEACHER_SUBJECTS: TeacherSubjects = {
 
 type AttendanceType = 'regular' | 'brigada';
 
-export default function ScanScreen() {
+const ScanScreen: React.FC = () => {
   const [studentId, setStudentId] = useState('');
   const [scannedStudent, setScannedStudent] = useState<{
     id: string;
@@ -58,6 +61,8 @@ export default function ScanScreen() {
   } | null>(null);
   const [attendanceType, setAttendanceType] = useState<AttendanceType>('regular');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
 
   // Get current date in a readable format
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -110,140 +115,217 @@ export default function ScanScreen() {
     }
   };
 
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === 'granted');
+    })();
+  }, []);
+
+  const handleBarCodeScanned = ({ data }: { data: string }) => {
+    setShowCamera(false);
+    setStudentId(data);
+    // Automatically submit after scanning
+    const foundStudent = MOCK_STUDENTS[data];
+    if (foundStudent) {
+      setScannedStudent({
+        id: data,
+        ...foundStudent
+      });
+      setSelectedSubject(null);
+      setStudentId('');
+    } else {
+      Alert.alert('Error', 'Student ID not found');
+      setStudentId('');
+    }
+  };
+
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: 'Scan Student Barcode'
+    });
+  }, [navigation]);
+
+  if (hasPermission === null) {
+    return <View style={styles.container}><Text>Requesting camera permission...</Text></View>;
+  }
+  if (hasPermission === false) {
+    return <View style={styles.container}><Text>No access to camera</Text></View>;
+  }
+
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Scan Student ID</Text>
-        
-        <View style={styles.attendanceTypeContainer}>
-          <TouchableOpacity
-            style={[
-              styles.attendanceTypeButton,
-              attendanceType === 'regular' && styles.attendanceTypeButtonActive
+      {showCamera ? (
+        <View style={styles.cameraContainer}>
+          <BarCodeScanner
+            style={StyleSheet.absoluteFillObject}
+            type={BarCodeScanner.Constants.Type.back}
+            barCodeTypes={[
+              BarCodeScanner.Constants.BarCodeType.code128,  // Most common for student IDs
+              BarCodeScanner.Constants.BarCodeType.ean13,    // Standard retail barcode
+              BarCodeScanner.Constants.BarCodeType.code39,   // Also common in ID systems
             ]}
-            onPress={() => {
-              setAttendanceType('regular');
-              setSelectedSubject(null);
-            }}
-          >
-            <Text style={[
-              styles.attendanceTypeText,
-              attendanceType === 'regular' && styles.attendanceTypeTextActive
-            ]}>Regular</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.attendanceTypeButton,
-              attendanceType === 'brigada' && styles.attendanceTypeButtonActive
-            ]}
-            onPress={() => {
-              setAttendanceType('brigada');
-              setSelectedSubject(null);
-            }}
-          >
-            <Text style={[
-              styles.attendanceTypeText,
-              attendanceType === 'brigada' && styles.attendanceTypeTextActive
-            ]}>Brigada</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.dateText}>{currentDate}</Text>
-        
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={studentId}
-            onChangeText={setStudentId}
-            placeholder="Enter Student ID"
-            placeholderTextColor="#666"
-            keyboardType="numeric"
-            maxLength={10}
-            autoFocus
+            onBarCodeScanned={handleBarCodeScanned}
           />
-          <TouchableOpacity 
-            style={styles.submitButton}
-            onPress={handleSubmit}
-          >
-            <MaterialIcons name="arrow-forward" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {scannedStudent && (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.studentCard}>
-              <MaterialIcons name="person" size={40} color="#28a745" />
-              <Text style={styles.studentName}>{scannedStudent.name}</Text>
-              <Text style={styles.studentDetails}>
-                Grade {scannedStudent.grade} - {scannedStudent.section}
-              </Text>
-              <Text style={styles.studentId}>{scannedStudent.id}</Text>
-
-              {attendanceType === 'regular' && (
-                <>
-                  <View style={styles.divider} />
-                  <Text style={styles.sectionTitle}>Select Subject</Text>
-                  <View style={styles.subjectsContainer}>
-                    {getTeacherSubjectsForStudent(scannedStudent.grade, scannedStudent.section).map((subject) => (
-                      <TouchableOpacity
-                        key={subject.id}
-                        style={[
-                          styles.subjectButton,
-                          selectedSubject?.id === subject.id && styles.subjectButtonSelected
-                        ]}
-                        onPress={() => setSelectedSubject(subject)}
-                      >
-                        <Text style={[
-                          styles.subjectButtonText,
-                          selectedSubject?.id === subject.id && styles.subjectButtonTextSelected
-                        ]}>
-                          {subject.name}
-                        </Text>
-                        <Text style={[
-                          styles.subjectCodeText,
-                          selectedSubject?.id === subject.id && styles.subjectButtonTextSelected
-                        ]}>
-                          {subject.code}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
-              
-              <View style={styles.attendanceButtons}>
-                <TouchableOpacity
-                  style={[styles.statusButton, styles.presentButton]}
-                  onPress={() => handleAttendanceSubmit('present')}
-                >
-                  <MaterialIcons name="check-circle" size={24} color="#fff" />
-                  <Text style={styles.statusButtonText}>Present</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.statusButton, styles.lateButton]}
-                  onPress={() => handleAttendanceSubmit('late')}
-                >
-                  <MaterialIcons name="schedule" size={24} color="#fff" />
-                  <Text style={styles.statusButtonText}>Late</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.statusButton, styles.absentButton]}
-                  onPress={() => handleAttendanceSubmit('absent')}
-                >
-                  <MaterialIcons name="cancel" size={24} color="#fff" />
-                  <Text style={styles.statusButtonText}>Absent</Text>
-                </TouchableOpacity>
-              </View>
+          <SafeAreaView style={styles.cameraOverlay}>
+            <View style={styles.cameraHeader}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowCamera(false)}
+              >
+                <MaterialIcons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.cameraTitle}>Scan Barcode</Text>
             </View>
-          </>
-        )}
-      </View>
+            <View style={styles.scanFrameContainer}>
+              <View style={styles.scanFrame} />
+              <Text style={styles.scanText}>Position barcode within frame</Text>
+            </View>
+          </SafeAreaView>
+        </View>
+      ) : (
+        <View style={styles.content}>
+          <Text style={styles.title}>Scan Student Barcode</Text>
+          
+          <View style={styles.attendanceTypeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.attendanceTypeButton,
+                attendanceType === 'regular' && styles.attendanceTypeButtonActive
+              ]}
+              onPress={() => {
+                setAttendanceType('regular');
+                setSelectedSubject(null);
+              }}
+            >
+              <Text style={[
+                styles.attendanceTypeText,
+                attendanceType === 'regular' && styles.attendanceTypeTextActive
+              ]}>Regular</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.attendanceTypeButton,
+                attendanceType === 'brigada' && styles.attendanceTypeButtonActive
+              ]}
+              onPress={() => {
+                setAttendanceType('brigada');
+                setSelectedSubject(null);
+              }}
+            >
+              <Text style={[
+                styles.attendanceTypeText,
+                attendanceType === 'brigada' && styles.attendanceTypeTextActive
+              ]}>Brigada</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.dateText}>{currentDate}</Text>
+          
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              value={studentId}
+              onChangeText={setStudentId}
+              placeholder="Enter Student ID"
+              placeholderTextColor="#666"
+              keyboardType="numeric"
+              maxLength={10}
+            />
+            <TouchableOpacity 
+              style={styles.submitButton}
+              onPress={handleSubmit}
+            >
+              <MaterialIcons name="arrow-forward" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.submitButton, styles.scanButton]}
+              onPress={() => setShowCamera(true)}
+            >
+              <MaterialIcons name="qr-code" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {scannedStudent && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.studentCard}>
+                <MaterialIcons name="person" size={40} color="#28a745" />
+                <Text style={styles.studentName}>{scannedStudent.name}</Text>
+                <Text style={styles.studentDetails}>
+                  Grade {scannedStudent.grade} - {scannedStudent.section}
+                </Text>
+                <Text style={styles.studentId}>{scannedStudent.id}</Text>
+
+                {attendanceType === 'regular' && (
+                  <>
+                    <View style={styles.divider} />
+                    <Text style={styles.sectionTitle}>Select Subject</Text>
+                    <View style={styles.subjectsContainer}>
+                      {getTeacherSubjectsForStudent(scannedStudent.grade, scannedStudent.section).map((subject) => (
+                        <TouchableOpacity
+                          key={subject.id}
+                          style={[
+                            styles.subjectButton,
+                            selectedSubject?.id === subject.id && styles.subjectButtonSelected
+                          ]}
+                          onPress={() => setSelectedSubject(subject)}
+                        >
+                          <Text style={[
+                            styles.subjectButtonText,
+                            selectedSubject?.id === subject.id && styles.subjectButtonTextSelected
+                          ]}>
+                            {subject.name}
+                          </Text>
+                          <Text style={[
+                            styles.subjectCodeText,
+                            selectedSubject?.id === subject.id && styles.subjectButtonTextSelected
+                          ]}>
+                            {subject.code}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+                
+                <View style={styles.attendanceButtons}>
+                  <TouchableOpacity
+                    style={[styles.statusButton, styles.presentButton]}
+                    onPress={() => handleAttendanceSubmit('present')}
+                  >
+                    <MaterialIcons name="check-circle" size={24} color="#fff" />
+                    <Text style={styles.statusButtonText}>Present</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.statusButton, styles.lateButton]}
+                    onPress={() => handleAttendanceSubmit('late')}
+                  >
+                    <MaterialIcons name="schedule" size={24} color="#fff" />
+                    <Text style={styles.statusButtonText}>Late</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.statusButton, styles.absentButton]}
+                    onPress={() => handleAttendanceSubmit('absent')}
+                  >
+                    <MaterialIcons name="cancel" size={24} color="#fff" />
+                    <Text style={styles.statusButtonText}>Absent</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+        </View>
+      )}
     </View>
   );
-}
+};
+
+export default ScanScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -324,6 +406,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  scanButton: {
+    backgroundColor: '#28a745',
   },
   divider: {
     height: 1,
@@ -426,5 +511,50 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  cameraContainer: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: '#000',
+  },
+  cameraOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  cameraHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: 20,
+  },
+  cameraTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 16,
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 20,
+  },
+  scanFrameContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: 'transparent',
+    borderRadius: 24,
+  },
+  scanText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 24,
+    textAlign: 'center',
+    fontWeight: '500',
   },
 }); 
