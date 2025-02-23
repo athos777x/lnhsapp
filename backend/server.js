@@ -174,6 +174,28 @@ app.get('/api/users/:userId', (req, res) => {
   });
 });
 
+// Get school years endpoint
+app.get('/api/school-years', (req, res) => {
+  const query = `
+    SELECT school_year 
+    FROM school_year 
+    ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, school_year_id ASC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    
+    const schoolYears = results.map(row => row.school_year);
+    res.json({
+      success: true,
+      data: schoolYears
+    });
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

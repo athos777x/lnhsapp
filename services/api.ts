@@ -24,6 +24,13 @@ interface UserDetails {
   student_id?: string;
 }
 
+// Add this interface for school year response
+interface SchoolYearResponse {
+  success: boolean;
+  data: string[];
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -96,6 +103,17 @@ export const api = {
       return response.data.data;
     } catch (error) {
       console.error('Get user details error:', error);
+      throw error;
+    }
+  },
+
+  // Get school years
+  async getSchoolYears(): Promise<string[]> {
+    try {
+      const response = await axios.get<SchoolYearResponse>(`${BASE_URL}/api/school-years`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Get school years error:', error);
       throw error;
     }
   }

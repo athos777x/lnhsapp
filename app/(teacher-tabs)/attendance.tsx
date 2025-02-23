@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import api from '../../services/api';
 
 type Section = {
   id: number;
@@ -87,15 +88,6 @@ const MOCK_STUDENTS: { [key: number]: Student[] } = {
   ],
 };
 
-// Add school year options
-const SCHOOL_YEARS = [
-  '2024-2025',
-  '2023-2024',
-  '2022-2023',
-  '2021-2022',
-  '2020-2021',
-];
-
 export default function TeacherAttendance() {
   const [sections] = useState<Section[]>(MOCK_SECTIONS);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -104,8 +96,9 @@ export default function TeacherAttendance() {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ text: string; color: string }>({ text: '', color: '' });
   const [showStatus, setShowStatus] = useState(false);
-  const [currentSchoolYear, setCurrentSchoolYear] = useState(SCHOOL_YEARS[0]);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState('');
   const [showYearPicker, setShowYearPicker] = useState(false);
+  const [schoolYears, setSchoolYears] = useState<string[]>([]);
 
   // Add status message handler
   const showStatusMessage = (message: string, color: string) => {
@@ -167,6 +160,24 @@ export default function TeacherAttendance() {
     setShowYearPicker(false);
     showStatusMessage(`School Year changed to ${year}`, '#28a745');
   };
+
+  const fetchSchoolYears = async () => {
+    try {
+      const schoolYears = await api.getSchoolYears();
+      setSchoolYears(schoolYears);
+      // Set the current school year to the first one (which will be the active one)
+      if (schoolYears.length > 0) {
+        setCurrentSchoolYear(schoolYears[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching school years:', error);
+      Alert.alert('Error', 'Failed to load school years');
+    }
+  };
+
+  useEffect(() => {
+    fetchSchoolYears();
+  }, []);
 
   const renderSection = ({ item }: { item: Section }) => (
     <TouchableOpacity
@@ -295,7 +306,7 @@ export default function TeacherAttendance() {
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
-            {SCHOOL_YEARS.map((year) => (
+            {schoolYears.map((year) => (
               <TouchableOpacity
                 key={year}
                 style={[
