@@ -196,6 +196,36 @@ app.get('/api/school-years', (req, res) => {
   });
 });
 
+// Get teacher's sections and subjects
+app.get('/api/teacher/sections/:employeeId', (req, res) => {
+  const employeeId = req.params.employeeId;
+  const query = `
+    SELECT 
+      CONCAT('Grade',' ',b.grade_level) AS grade_level, 
+      c.section_name, 
+      IF(a.elective='0',b.subject_name,e.name) AS subject_name,
+      a.section_id,
+      a.subject_id
+    FROM subject_assigned a 
+    LEFT JOIN SUBJECT b ON a.subject_id=b.subject_id 
+    LEFT JOIN section c ON a.section_id=c.section_id 
+    LEFT JOIN employee d ON a.employee_id=d.employee_id 
+    LEFT JOIN elective e ON a.elective=e.elective_id 
+    WHERE d.employee_id = ?`;
+
+  db.query(query, [employeeId], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    
+    res.json({
+      success: true,
+      data: results
+    });
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

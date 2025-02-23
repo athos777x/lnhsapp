@@ -31,6 +31,20 @@ interface SchoolYearResponse {
   error?: string;
 }
 
+interface TeacherSection {
+  grade_level: string;
+  section_name: string;
+  subject_name: string;
+  section_id: number;
+  subject_id: number;
+}
+
+interface TeacherSectionsResponse {
+  success: boolean;
+  data: TeacherSection[];
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -114,6 +128,19 @@ export const api = {
       return response.data.data;
     } catch (error) {
       console.error('Get school years error:', error);
+      throw error;
+    }
+  },
+
+  // Get teacher sections
+  async getTeacherSections(employeeId: number): Promise<TeacherSection[]> {
+    try {
+      const response = await axios.get<TeacherSectionsResponse>(
+        `${BASE_URL}/api/teacher/sections/${employeeId}`
+      );
+      return response.data.data;
+    } catch (error) {
+      console.error('Get teacher sections error:', error);
       throw error;
     }
   }
