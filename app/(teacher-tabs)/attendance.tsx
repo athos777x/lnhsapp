@@ -12,15 +12,15 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 
 type Section = {
-  id: number;
-  name: string;
+  section_id: number;
+  section_name: string;
   grade_level: string;
+  subjects: Subject[];
 };
 
 type Subject = {
-  id: number;
-  name: string;
-  code: string;
+  subject_id: number;
+  subject_name: string;
 };
 
 type Student = {
@@ -30,37 +30,7 @@ type Student = {
   attendance_status?: 'present' | 'late' | 'absent';
 };
 
-// Mock Data
-const MOCK_SECTIONS: Section[] = [
-  { id: 1, name: 'Diamond', grade_level: '7' },
-  { id: 2, name: 'Pearl', grade_level: '8' },
-  { id: 3, name: 'Ruby', grade_level: '9' },
-  { id: 4, name: 'Emerald', grade_level: '10' },
-];
-
-const MOCK_SUBJECTS: { [key: number]: Subject[] } = {
-  1: [
-    { id: 1, name: 'Mathematics', code: 'MATH7' },
-    { id: 2, name: 'Science', code: 'SCI7' },
-    { id: 3, name: 'English', code: 'ENG7' },
-  ],
-  2: [
-    { id: 4, name: 'Mathematics', code: 'MATH8' },
-    { id: 5, name: 'Science', code: 'SCI8' },
-    { id: 6, name: 'English', code: 'ENG8' },
-  ],
-  3: [
-    { id: 7, name: 'Mathematics', code: 'MATH9' },
-    { id: 8, name: 'Science', code: 'SCI9' },
-    { id: 9, name: 'English', code: 'ENG9' },
-  ],
-  4: [
-    { id: 10, name: 'Mathematics', code: 'MATH10' },
-    { id: 11, name: 'Science', code: 'SCI10' },
-    { id: 12, name: 'English', code: 'ENG10' },
-  ],
-};
-
+// Remove MOCK_SECTIONS and keep only MOCK_STUDENTS for now
 const MOCK_STUDENTS: { [key: number]: Student[] } = {
   1: [
     { id: 1, name: 'John Doe', student_id: '2024-0001' },
@@ -89,7 +59,7 @@ const MOCK_STUDENTS: { [key: number]: Student[] } = {
 };
 
 export default function TeacherAttendance() {
-  const [sections] = useState<Section[]>(MOCK_SECTIONS);
+  const [sections, setSections] = useState<Section[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
@@ -114,14 +84,13 @@ export default function TeacherAttendance() {
     setSelectedSection(section);
     setSelectedSubject(null);
     setStudents([]);
-    // Load mock subjects for the selected section
-    setSubjects(MOCK_SUBJECTS[section.id]);
+    setSubjects(section.subjects);
   };
 
   const handleSubjectPress = (subject: Subject) => {
     setSelectedSubject(subject);
     // Load mock students for the selected section
-    setStudents(MOCK_STUDENTS[selectedSection!.id].map(student => ({
+    setStudents(MOCK_STUDENTS[selectedSection!.section_id].map(student => ({
       ...student,
       attendance_status: undefined,
     })));
@@ -175,7 +144,42 @@ export default function TeacherAttendance() {
     }
   };
 
+  // Add this function to fetch and organize the teacher's sections
+  const fetchTeacherSections = async () => {
+    try {
+      // You'll need to get the employee ID from your auth context or storage
+      const employeeId = 1; // Replace with actual employee ID
+      const sectionsData = await api.getTeacherSections(employeeId);
+      
+      // Organize the data by sections
+      const sectionMap = new Map<number, Section>();
+      
+      sectionsData.forEach(item => {
+        if (!sectionMap.has(item.section_id)) {
+          sectionMap.set(item.section_id, {
+            section_id: item.section_id,
+            section_name: item.section_name,
+            grade_level: item.grade_level,
+            subjects: []
+          });
+        }
+        
+        const section = sectionMap.get(item.section_id)!;
+        section.subjects.push({
+          subject_id: item.subject_id,
+          subject_name: item.subject_name
+        });
+      });
+      
+      setSections(Array.from(sectionMap.values()));
+    } catch (error) {
+      console.error('Error fetching teacher sections:', error);
+      Alert.alert('Error', 'Failed to load sections');
+    }
+  };
+
   useEffect(() => {
+    fetchTeacherSections();
     fetchSchoolYears();
   }, []);
 
@@ -183,21 +187,21 @@ export default function TeacherAttendance() {
     <TouchableOpacity
       style={[
         styles.card,
-        selectedSection?.id === item.id && styles.selectedCard,
+        selectedSection?.section_id === item.section_id && styles.selectedCard,
       ]}
       onPress={() => handleSectionPress(item)}
     >
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{item.name}</Text>
+          <Text style={styles.cardTitle}>{item.section_name}</Text>
           <View style={styles.gradeBadge}>
-            <Text style={styles.gradeBadgeText}>Grade {item.grade_level}</Text>
+            <Text style={styles.gradeBadgeText}>{item.grade_level}</Text>
           </View>
         </View>
         <Ionicons 
           name="chevron-forward" 
           size={20} 
-          color={selectedSection?.id === item.id ? "#28a745" : "#666"} 
+          color={selectedSection?.section_id === item.section_id ? "#28a745" : "#666"} 
         />
       </View>
     </TouchableOpacity>
@@ -207,19 +211,18 @@ export default function TeacherAttendance() {
     <TouchableOpacity
       style={[
         styles.card,
-        selectedSubject?.id === item.id && styles.selectedCard,
+        selectedSubject?.subject_id === item.subject_id && styles.selectedCard,
       ]}
       onPress={() => handleSubjectPress(item)}
     >
       <View style={styles.cardContent}>
         <View>
-          <Text style={styles.cardTitle}>{item.name}</Text>
-          <Text style={styles.cardSubtitle}>{item.code}</Text>
+          <Text style={styles.cardTitle}>{item.subject_name}</Text>
         </View>
         <Ionicons 
           name="chevron-forward" 
           size={20} 
-          color={selectedSubject?.id === item.id ? "#28a745" : "#666"} 
+          color={selectedSubject?.subject_id === item.subject_id ? "#28a745" : "#666"} 
         />
       </View>
     </TouchableOpacity>
@@ -348,7 +351,7 @@ export default function TeacherAttendance() {
           <FlatList
             data={sections}
             renderItem={renderSection}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => item.section_id.toString()}
             contentContainerStyle={styles.listContainer}
           />
         </>
@@ -366,7 +369,7 @@ export default function TeacherAttendance() {
           <FlatList
             data={subjects}
             renderItem={renderSubject}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => item.subject_id.toString()}
             contentContainerStyle={styles.listContainer}
           />
         </>
