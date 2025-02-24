@@ -45,6 +45,14 @@ interface TeacherSectionsResponse {
   error?: string;
 }
 
+interface EmployeeResponse {
+  success: boolean;
+  data: {
+    employee_id: number;
+  };
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -141,6 +149,19 @@ export const api = {
       return response.data.data;
     } catch (error) {
       console.error('Get teacher sections error:', error);
+      throw error;
+    }
+  },
+
+  // Add this new method
+  async getEmployeeId(userId: number): Promise<number> {
+    try {
+      const response = await axios.get<EmployeeResponse>(
+        `${BASE_URL}/api/employee/${userId}`
+      );
+      return response.data.data.employee_id;
+    } catch (error) {
+      console.error('Get employee ID error:', error);
       throw error;
     }
   }

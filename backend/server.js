@@ -199,6 +199,8 @@ app.get('/api/school-years', (req, res) => {
 // Get teacher's sections and subjects
 app.get('/api/teacher/sections/:employeeId', (req, res) => {
   const employeeId = req.params.employeeId;
+  console.log('Fetching sections for employee ID:', employeeId);
+  
   const query = `
     SELECT 
       CONCAT('Grade',' ',b.grade_level) AS grade_level, 
@@ -219,10 +221,55 @@ app.get('/api/teacher/sections/:employeeId', (req, res) => {
       return res.status(500).json({ error: 'Internal server error' });
     }
     
+    console.log('Query results:', results);
     res.json({
       success: true,
       data: results
     });
+  });
+});
+
+// Add this new endpoint with improved logging
+app.get('/api/employee/:userId', (req, res) => {
+  const userId = req.params.userId;
+  console.log('Fetching employee ID for user:', userId);
+  
+  const query = `
+    SELECT a.employee_id 
+    FROM employee a 
+    LEFT JOIN users b ON a.user_id = b.user_id 
+    WHERE b.user_id = ?
+  `;
+  
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error',
+        details: err.message 
+      });
+    }
+    
+    console.log('Query results:', results);
+    
+    if (results && results.length > 0) {
+      const response = {
+        success: true,
+        data: {
+          employee_id: results[0].employee_id
+        }
+      };
+      console.log('Sending response:', response);
+      res.json(response);
+    } else {
+      console.log('No employee found for user ID:', userId);
+      res.status(404).json({ 
+        success: false, 
+        error: 'Employee not found',
+        details: `No employee record found for user ID: ${userId}` 
+      });
+    }
   });
 });
 

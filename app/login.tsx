@@ -13,6 +13,7 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -20,6 +21,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const { setUserData } = useAuth();
 
   const handleLogin = async () => {
     try {
@@ -41,11 +43,12 @@ export default function LoginScreen() {
       
       if (response.success && response.data) {
         console.log('Login successful, getting user details...');
-        // Get user details
-        const userDetails = await api.getUserDetails(response.data.userId);
-        console.log('User details:', userDetails);
+        // Store user data in context instead of AsyncStorage
+        setUserData({
+          userId: response.data.userId,
+          role: response.data.role
+        });
         
-        // Check if role is allowed and redirect accordingly
         const role = response.data.role;
         console.log('Checking role:', role);
         
