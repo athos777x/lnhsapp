@@ -309,6 +309,47 @@ app.get('/api/section/:sectionId/students', (req, res) => {
   });
 });
 
+// Get employee details
+app.get('/api/employee/details/:employeeId', (req, res) => {
+  const employeeId = req.params.employeeId;
+  console.log('Fetching employee details for ID:', employeeId);
+  
+  const query = `
+    SELECT 
+      a.employee_id, 
+      CONCAT(a.lastname,', ',a.firstname,' ', IFNULL(a.middlename,'')) AS emp_name, 
+      a.address, 
+      a.contact_number 
+    FROM employee a 
+    WHERE employee_id = ?
+  `;
+
+  db.query(query, [employeeId], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error',
+        details: err.message 
+      });
+    }
+    
+    if (results && results.length > 0) {
+      console.log('Employee details found:', results[0]);
+      res.json({
+        success: true,
+        data: results[0]
+      });
+    } else {
+      console.log('No employee found with ID:', employeeId);
+      res.status(404).json({
+        success: false,
+        error: 'Employee not found'
+      });
+    }
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

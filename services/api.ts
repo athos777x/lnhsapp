@@ -67,6 +67,20 @@ interface SectionStudentsResponse {
   error?: string;
 }
 
+// Add this interface
+interface EmployeeDetails {
+  employee_id: number;
+  emp_name: string;
+  address: string;
+  contact_number: string;
+}
+
+interface EmployeeDetailsResponse {
+  success: boolean;
+  data: EmployeeDetails;
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -189,6 +203,19 @@ export const api = {
       return response.data.data;
     } catch (error) {
       console.error('Get section students error:', error);
+      throw error;
+    }
+  },
+
+  // Get employee details
+  async getEmployeeDetails(employeeId: number): Promise<EmployeeDetails> {
+    try {
+      const response = await axios.get<EmployeeDetailsResponse>(
+        `${BASE_URL}/api/employee/details/${employeeId}`
+      );
+      return response.data.data;
+    } catch (error) {
+      console.error('Get employee details error:', error);
       throw error;
     }
   }
