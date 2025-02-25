@@ -7,9 +7,12 @@ import {
   FlatList,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useRouter } from 'expo-router';
 
 type Section = {
   section_id: number;
@@ -69,6 +72,10 @@ export default function TeacherAttendance() {
   const [currentSchoolYear, setCurrentSchoolYear] = useState('');
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [schoolYears, setSchoolYears] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { userData } = useAuth();
+  const router = useRouter();
 
   // Add status message handler
   const showStatusMessage = (message: string, color: string) => {
@@ -144,19 +151,38 @@ export default function TeacherAttendance() {
     }
   };
 
-  // Add this function to fetch and organize the teacher's sections
-  const fetchTeacherSections = async () => {
+  // Add this function to fetch teacher sections
+  const fetchTeacherData = async () => {
     try {
-      // You'll need to get the employee ID from your auth context or storage
-      const employeeId = 1; // Replace with actual employee ID
-      const sectionsData = await api.getTeacherSections(employeeId);
+      setIsLoading(true);
+      setError(null);
       
-      // Organize the data by sections
+      if (!userData) {
+        setError('User not logged in');
+        router.replace('/login');
+        return;
+      }
+      
+      const userId = userData.userId;
+      console.log('Current user ID:', userId);
+      
+      // Get employee ID
+      const employeeId = await api.getEmployeeId(userId);
+      console.log('Employee ID:', employeeId);
+      
+      // Get sections
+      const sectionsData = await api.getTeacherSections(employeeId);
+      console.log('Raw sections data:', sectionsData);
+      
+      // Create a map to store unique sections by section_id
       const sectionMap = new Map<number, Section>();
       
+      // First pass: Create unique sections
       sectionsData.forEach(item => {
-        if (!sectionMap.has(item.section_id)) {
-          sectionMap.set(item.section_id, {
+        const sectionKey = item.section_id;
+        
+        if (!sectionMap.has(sectionKey)) {
+          sectionMap.set(sectionKey, {
             section_id: item.section_id,
             section_name: item.section_name,
             grade_level: item.grade_level,
@@ -164,24 +190,85 @@ export default function TeacherAttendance() {
           });
         }
         
-        const section = sectionMap.get(item.section_id)!;
-        section.subjects.push({
-          subject_id: item.subject_id,
-          subject_name: item.subject_name
-        });
+        // Add subject to the section
+        const section = sectionMap.get(sectionKey)!;
+        // Check if subject doesn't already exist in the section
+        if (!section.subjects.some(s => s.subject_id === item.subject_id)) {
+          section.subjects.push({
+            subject_id: item.subject_id,
+            subject_name: item.subject_name
+          });
+        }
       });
       
-      setSections(Array.from(sectionMap.values()));
-    } catch (error) {
-      console.error('Error fetching teacher sections:', error);
-      Alert.alert('Error', 'Failed to load sections');
+      // Convert map to array and sort by grade level and section name
+      const finalSections = Array.from(sectionMap.values())
+        .sort((a, b) => {
+          // Extract grade numbers for comparison
+          const gradeA = parseInt(a.grade_level.replace('Grade ', ''));
+          const gradeB = parseInt(b.grade_level.replace('Grade ', ''));
+          
+          // Sort by grade level first
+          if (gradeA !== gradeB) {
+            return gradeB - gradeA; // Higher grades first
+          }
+          
+          // If same grade, sort by section name
+          return a.section_name.localeCompare(b.section_name);
+        });
+      
+      console.log('Final sections data:', finalSections);
+      setSections(finalSections);
+    } catch (error: any) {
+      console.error('Error fetching teacher data:', error);
+      let errorMessage = 'Failed to load sections. Please try again.';
+      
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        if (error.response.status === 404) {
+          errorMessage = 'Teacher profile not found. Please contact administrator.';
+        } else if (error.response.data?.error) {
+          errorMessage = error.response.data.error;
+        }
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTeacherSections();
+    fetchTeacherData();
     fetchSchoolYears();
   }, []);
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#28a745" />
+          <Text style={styles.loadingText}>Loading sections...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={fetchTeacherData}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const renderSection = ({ item }: { item: Section }) => (
     <TouchableOpacity
@@ -613,6 +700,39 @@ const styles = StyleSheet.create({
   },
   selectedYearOptionText: {
     color: '#fff',
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#dc3545',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#28a745',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });
