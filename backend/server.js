@@ -273,6 +273,42 @@ app.get('/api/employee/:userId', (req, res) => {
   });
 });
 
+// Get students in a section
+app.get('/api/section/:sectionId/students', (req, res) => {
+  const sectionId = req.params.sectionId;
+  console.log('Fetching students for section ID:', sectionId);
+  
+  const query = `
+    SELECT 
+      CONCAT(a.lastname,', ',a.firstname,' ', IFNULL(a.middlename,'')) AS stud_name,
+      a.student_id,  
+      a.lrn 
+    FROM student a 
+    LEFT JOIN section b ON a.section_id=b.section_id AND a.current_yr_lvl=b.grade_level 
+    WHERE a.section_id = ?
+  `;
+
+  db.query(query, [sectionId], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error',
+        details: err.message 
+      });
+    }
+    
+    console.log('Query results:', results);
+    res.json({
+      success: true,
+      data: results.map(student => ({
+        ...student,
+        id: student.student_id.toString() // Ensure we have a unique id
+      }))
+    });
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

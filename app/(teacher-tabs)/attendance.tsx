@@ -27,38 +27,11 @@ type Subject = {
 };
 
 type Student = {
-  id: number;
-  name: string;
-  student_id: string;
+  id: string;
+  stud_name: string;
+  student_id: number;
+  lrn?: string;
   attendance_status?: 'present' | 'late' | 'absent';
-};
-
-// Remove MOCK_SECTIONS and keep only MOCK_STUDENTS for now
-const MOCK_STUDENTS: { [key: number]: Student[] } = {
-  1: [
-    { id: 1, name: 'John Doe', student_id: '2024-0001' },
-    { id: 2, name: 'Jane Smith', student_id: '2024-0002' },
-    { id: 3, name: 'Bob Johnson', student_id: '2024-0003' },
-    { id: 4, name: 'Alice Brown', student_id: '2024-0004' },
-  ],
-  2: [
-    { id: 5, name: 'Charlie Wilson', student_id: '2024-0005' },
-    { id: 6, name: 'Diana Clark', student_id: '2024-0006' },
-    { id: 7, name: 'Edward Davis', student_id: '2024-0007' },
-    { id: 8, name: 'Fiona Miller', student_id: '2024-0008' },
-  ],
-  3: [
-    { id: 9, name: 'George White', student_id: '2024-0009' },
-    { id: 10, name: 'Hannah Lee', student_id: '2024-0010' },
-    { id: 11, name: 'Ian Chen', student_id: '2024-0011' },
-    { id: 12, name: 'Julia Wang', student_id: '2024-0012' },
-  ],
-  4: [
-    { id: 13, name: 'Kevin Park', student_id: '2024-0013' },
-    { id: 14, name: 'Linda Kim', student_id: '2024-0014' },
-    { id: 15, name: 'Michael Zhang', student_id: '2024-0015' },
-    { id: 16, name: 'Nancy Liu', student_id: '2024-0016' },
-  ],
 };
 
 export default function TeacherAttendance() {
@@ -87,20 +60,38 @@ export default function TeacherAttendance() {
     }, 2000);
   };
 
-  const handleSectionPress = (section: Section) => {
+  const handleSectionPress = async (section: Section) => {
     setSelectedSection(section);
     setSelectedSubject(null);
     setStudents([]);
     setSubjects(section.subjects);
+    
+    try {
+      console.log('Fetching students for section:', section.section_id);
+      const sectionStudents = await api.getSectionStudents(section.section_id);
+      console.log('Received students:', sectionStudents);
+      
+      // Map the API response to match our Student type
+      const formattedStudents = sectionStudents.map(student => ({
+        id: student.student_id.toString(),
+        stud_name: student.stud_name,
+        student_id: student.student_id,
+        lrn: student.lrn || undefined,
+        attendance_status: undefined
+      }));
+      
+      console.log('Formatted students:', formattedStudents);
+      setStudents(formattedStudents);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      showStatusMessage('Failed to load students', '#dc3545');
+    }
   };
 
   const handleSubjectPress = (subject: Subject) => {
+    console.log('Selected subject:', subject);
+    console.log('Current students:', students);
     setSelectedSubject(subject);
-    // Load mock students for the selected section
-    setStudents(MOCK_STUDENTS[selectedSection!.section_id].map(student => ({
-      ...student,
-      attendance_status: undefined,
-    })));
   };
 
   const handleAttendanceStatus = async (student: Student, status: 'present' | 'late' | 'absent') => {
@@ -112,14 +103,14 @@ export default function TeacherAttendance() {
           const newStatus = s.attendance_status === status ? undefined : status;
           // Show appropriate status message with color
           if (newStatus === undefined) {
-            showStatusMessage(`Unmarked ${student.name}`, '#6c757d'); // Gray for unmark
+            showStatusMessage(`Unmarked ${student.stud_name}`, '#6c757d'); // Gray for unmark
           } else {
             const statusColors = {
               present: '#28a745',
               late: '#ffc107',
               absent: '#dc3545'
             };
-            showStatusMessage(`Marked ${student.name} as ${status}`, statusColors[status]);
+            showStatusMessage(`Marked ${student.stud_name} as ${status}`, statusColors[status]);
           }
           return { ...s, attendance_status: newStatus };
         }
@@ -315,60 +306,65 @@ export default function TeacherAttendance() {
     </TouchableOpacity>
   );
 
-  const renderStudent = ({ item }: { item: Student }) => (
-    <View style={styles.studentCard}>
-      <View style={styles.studentCardContent}>
-        <View style={styles.studentInfo}>
-          <Text style={styles.studentName}>{item.name}</Text>
-          <Text style={styles.studentId}>{item.student_id}</Text>
-        </View>
-        <View style={styles.attendanceButtons}>
-          <TouchableOpacity
-            style={[
-              styles.statusButton,
-              { borderColor: '#28a745' },
-              item.attendance_status === 'present' && styles.presentButtonSelected,
-            ]}
-            onPress={() => handleAttendanceStatus(item, 'present')}
-          >
-            <Ionicons 
-              name="checkmark-circle" 
-              size={20} 
-              color={item.attendance_status === 'present' ? '#fff' : '#28a745'} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.statusButton,
-              { borderColor: '#ffc107' },
-              item.attendance_status === 'late' && styles.lateButtonSelected,
-            ]}
-            onPress={() => handleAttendanceStatus(item, 'late')}
-          >
-            <Ionicons 
-              name="time" 
-              size={20} 
-              color={item.attendance_status === 'late' ? '#fff' : '#ffc107'} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.statusButton,
-              { borderColor: '#dc3545' },
-              item.attendance_status === 'absent' && styles.absentButtonSelected,
-            ]}
-            onPress={() => handleAttendanceStatus(item, 'absent')}
-          >
-            <Ionicons 
-              name="close-circle" 
-              size={20} 
-              color={item.attendance_status === 'absent' ? '#fff' : '#dc3545'} 
-            />
-          </TouchableOpacity>
+  const renderStudent = ({ item }: { item: Student }) => {
+    console.log('Rendering student:', item);
+    return (
+      <View style={styles.studentCard} key={item.id}>
+        <View style={styles.studentCardContent}>
+          <View style={styles.studentInfo}>
+            <Text style={styles.studentName}>{item.stud_name}</Text>
+            <Text style={styles.studentId}>
+              {item.lrn || `ID: ${item.student_id}`}
+            </Text>
+          </View>
+          <View style={styles.attendanceButtons}>
+            <TouchableOpacity
+              style={[
+                styles.statusButton,
+                { borderColor: '#28a745' },
+                item.attendance_status === 'present' && styles.presentButtonSelected,
+              ]}
+              onPress={() => handleAttendanceStatus(item, 'present')}
+            >
+              <Ionicons 
+                name="checkmark-circle" 
+                size={20} 
+                color={item.attendance_status === 'present' ? '#fff' : '#28a745'} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.statusButton,
+                { borderColor: '#ffc107' },
+                item.attendance_status === 'late' && styles.lateButtonSelected,
+              ]}
+              onPress={() => handleAttendanceStatus(item, 'late')}
+            >
+              <Ionicons 
+                name="time" 
+                size={20} 
+                color={item.attendance_status === 'late' ? '#fff' : '#ffc107'} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.statusButton,
+                { borderColor: '#dc3545' },
+                item.attendance_status === 'absent' && styles.absentButtonSelected,
+              ]}
+              onPress={() => handleAttendanceStatus(item, 'absent')}
+            >
+              <Ionicons 
+                name="close-circle" 
+                size={20} 
+                color={item.attendance_status === 'absent' ? '#fff' : '#dc3545'} 
+              />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -474,8 +470,9 @@ export default function TeacherAttendance() {
           <FlatList
             data={students}
             renderItem={renderStudent}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
+            extraData={selectedSubject}
           />
         </>
       )}
