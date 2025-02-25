@@ -317,13 +317,11 @@ app.get('/api/employee/details/:employeeId', (req, res) => {
   console.log('Fetching employee details for ID:', employeeId);
   
   const query = `
-    SELECT 
-      a.employee_id, 
+    SELECT a.employee_id, 
       CONCAT(a.lastname,', ',a.firstname,' ', IFNULL(a.middlename,'')) AS emp_name, 
-      a.address, 
-      a.contact_number 
-    FROM employee a 
-    WHERE employee_id = ?
+      DATE_FORMAT(a.birthday, '%M %d, %Y') AS birthday,
+      a.gender, a.address, a.contact_number
+      FROM employee a WHERE employee_id = ?
   `;
 
   db.query(query, [employeeId], (err, results) => {
