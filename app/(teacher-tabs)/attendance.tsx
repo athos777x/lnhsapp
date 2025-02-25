@@ -24,6 +24,7 @@ type Section = {
 type Subject = {
   subject_id: number;
   subject_name: string;
+  time_range: string;
 };
 
 type Student = {
@@ -34,6 +35,11 @@ type Student = {
   attendance_status?: 'present' | 'late' | 'absent';
 };
 
+type SchoolYear = {
+  school_year: string;
+  school_year_id: number;
+};
+
 export default function TeacherAttendance() {
   const [sections, setSections] = useState<Section[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -42,9 +48,9 @@ export default function TeacherAttendance() {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ text: string; color: string }>({ text: '', color: '' });
   const [showStatus, setShowStatus] = useState(false);
-  const [currentSchoolYear, setCurrentSchoolYear] = useState('');
+  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<SchoolYear | null>(null);
   const [showYearPicker, setShowYearPicker] = useState(false);
-  const [schoolYears, setSchoolYears] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { userData } = useAuth();
@@ -122,19 +128,21 @@ export default function TeacherAttendance() {
     }
   };
 
-  const handleSchoolYearPress = (year: string) => {
+  const handleSchoolYearPress = (year: SchoolYear) => {
     setCurrentSchoolYear(year);
     setShowYearPicker(false);
-    showStatusMessage(`School Year changed to ${year}`, '#28a745');
+    showStatusMessage(`School Year changed to ${year.school_year}`, '#28a745');
+    // Pass the selected year directly to fetchTeacherData
+    fetchTeacherData(year);
   };
 
   const fetchSchoolYears = async () => {
     try {
-      const schoolYears = await api.getSchoolYears();
-      setSchoolYears(schoolYears);
+      const years = await api.getSchoolYears();
+      setSchoolYears(years);
       // Set the current school year to the first one (which will be the active one)
-      if (schoolYears.length > 0) {
-        setCurrentSchoolYear(schoolYears[0]);
+      if (years.length > 0) {
+        setCurrentSchoolYear(years[0]);
       }
     } catch (error) {
       console.error('Error fetching school years:', error);
@@ -143,13 +151,14 @@ export default function TeacherAttendance() {
   };
 
   // Add this function to fetch teacher sections
-  const fetchTeacherData = async () => {
+  const fetchTeacherData = async (schoolYear = currentSchoolYear) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      if (!userData) {
-        setError('User not logged in');
+      if (!userData || !schoolYear) {
+        console.log('Missing data:', { userData, schoolYear });
+        setError('Please log in again');
         router.replace('/login');
         return;
       }
@@ -161,8 +170,8 @@ export default function TeacherAttendance() {
       const employeeId = await api.getEmployeeId(userId);
       console.log('Employee ID:', employeeId);
       
-      // Get sections
-      const sectionsData = await api.getTeacherSections(employeeId);
+      // Get sections using the school year ID directly
+      const sectionsData = await api.getTeacherSections(employeeId, schoolYear.school_year_id);
       console.log('Raw sections data:', sectionsData);
       
       // Create a map to store unique sections by section_id
@@ -187,7 +196,8 @@ export default function TeacherAttendance() {
         if (!section.subjects.some(s => s.subject_id === item.subject_id)) {
           section.subjects.push({
             subject_id: item.subject_id,
-            subject_name: item.subject_name
+            subject_name: item.subject_name,
+            time_range: item.time_range
           });
         }
       });
@@ -230,9 +240,32 @@ export default function TeacherAttendance() {
   };
 
   useEffect(() => {
-    fetchTeacherData();
-    fetchSchoolYears();
-  }, []);
+    // First fetch school years
+    const initializeData = async () => {
+      try {
+        setIsLoading(true);
+        // First get school years
+        const years = await api.getSchoolYears();
+        setSchoolYears(years);
+        
+        // Set current school year
+        if (years.length > 0) {
+          setCurrentSchoolYear(years[0]);
+          // Only fetch teacher data after we have the school year
+          if (userData) {
+            await fetchTeacherData(years[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing data:', error);
+        setError('Failed to load initial data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeData();
+  }, [userData]); // Add userData as dependency
 
   if (isLoading) {
     return (
@@ -252,7 +285,33 @@ export default function TeacherAttendance() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity 
             style={styles.retryButton}
-            onPress={fetchTeacherData}
+            onPress={() => {
+              // First fetch school years
+              const initializeData = async () => {
+                try {
+                  setIsLoading(true);
+                  // First get school years
+                  const years = await api.getSchoolYears();
+                  setSchoolYears(years);
+                  
+                  // Set current school year
+                  if (years.length > 0) {
+                    setCurrentSchoolYear(years[0]);
+                    // Only fetch teacher data after we have the school year
+                    if (userData) {
+                      await fetchTeacherData(years[0]);
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error initializing data:', error);
+                  setError('Failed to load initial data');
+                } finally {
+                  setIsLoading(false);
+                }
+              };
+
+              initializeData();
+            }}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -296,6 +355,9 @@ export default function TeacherAttendance() {
       <View style={styles.cardContent}>
         <View>
           <Text style={styles.cardTitle}>{item.subject_name}</Text>
+          <View style={styles.gradeBadge}>
+            <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
+          </View>
         </View>
         <Ionicons 
           name="chevron-forward" 
@@ -394,20 +456,20 @@ export default function TeacherAttendance() {
             </View>
             {schoolYears.map((year) => (
               <TouchableOpacity
-                key={year}
+                key={year.school_year_id}
                 style={[
                   styles.yearOption,
-                  currentSchoolYear === year && styles.selectedYearOption,
+                  currentSchoolYear?.school_year_id === year.school_year_id && styles.selectedYearOption,
                 ]}
                 onPress={() => handleSchoolYearPress(year)}
               >
                 <Text style={[
                   styles.yearOptionText,
-                  currentSchoolYear === year && styles.selectedYearOptionText,
+                  currentSchoolYear?.school_year_id === year.school_year_id && styles.selectedYearOptionText,
                 ]}>
-                  {year}
+                  {year.school_year}
                 </Text>
-                {currentSchoolYear === year && (
+                {currentSchoolYear?.school_year_id === year.school_year_id && (
                   <Ionicons name="checkmark" size={24} color="#fff" />
                 )}
               </TouchableOpacity>
@@ -427,7 +489,9 @@ export default function TeacherAttendance() {
               onPress={() => setShowYearPicker(true)}
             >
               <Ionicons name="calendar-outline" size={20} color="#28a745" />
-              <Text style={styles.schoolYearText}>School Year {currentSchoolYear}</Text>
+              <Text style={styles.schoolYearText}>
+                School Year {currentSchoolYear?.school_year || 'Loading...'}
+              </Text>
               <Ionicons name="chevron-down" size={20} color="#28a745" />
             </TouchableOpacity>
           </View>

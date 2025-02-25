@@ -25,9 +25,14 @@ interface UserDetails {
 }
 
 // Add this interface for school year response
+interface SchoolYear {
+  school_year: string;
+  school_year_id: number;
+}
+
 interface SchoolYearResponse {
   success: boolean;
-  data: string[];
+  data: SchoolYear[];
   error?: string;
 }
 
@@ -37,7 +42,15 @@ interface TeacherSection {
   subject_name: string;
   section_id: number;
   subject_id: number;
+  time_range: string;
 }
+
+type Subject = {
+  id: number;
+  subject_id: number;
+  subject_name: string;
+  time_range: string;
+};
 
 interface TeacherSectionsResponse {
   success: boolean;
@@ -158,7 +171,7 @@ export const api = {
   },
 
   // Get school years
-  async getSchoolYears(): Promise<string[]> {
+  async getSchoolYears(): Promise<SchoolYear[]> {
     try {
       const response = await axios.get<SchoolYearResponse>(`${BASE_URL}/api/school-years`);
       return response.data.data;
@@ -169,10 +182,10 @@ export const api = {
   },
 
   // Get teacher sections
-  async getTeacherSections(employeeId: number): Promise<TeacherSection[]> {
+  async getTeacherSections(employeeId: number, schoolYearId: number): Promise<TeacherSection[]> {
     try {
       const response = await axios.get<TeacherSectionsResponse>(
-        `${BASE_URL}/api/teacher/sections/${employeeId}`
+        `${BASE_URL}/api/teacher/sections/${employeeId}/${schoolYearId}`
       );
       return response.data.data;
     } catch (error) {
@@ -216,6 +229,17 @@ export const api = {
       return response.data.data;
     } catch (error) {
       console.error('Get employee details error:', error);
+      throw error;
+    }
+  },
+
+  // Add this function to get school year ID from school year string
+  async getSchoolYearId(schoolYear: string): Promise<number> {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/school-year-id/${schoolYear}`);
+      return response.data.id;
+    } catch (error) {
+      console.error('Get school year ID error:', error);
       throw error;
     }
   }

@@ -177,7 +177,7 @@ app.get('/api/users/:userId', (req, res) => {
 // Get school years endpoint
 app.get('/api/school-years', (req, res) => {
   const query = `
-    SELECT school_year 
+    SELECT school_year, school_year_id
     FROM school_year 
     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, school_year_id ASC
   `;
@@ -188,34 +188,36 @@ app.get('/api/school-years', (req, res) => {
       return res.status(500).json({ error: 'Internal server error' });
     }
     
-    const schoolYears = results.map(row => row.school_year);
     res.json({
       success: true,
-      data: schoolYears
+      data: results
     });
   });
 });
 
 // Get teacher's sections and subjects
-app.get('/api/teacher/sections/:employeeId', (req, res) => {
+app.get('/api/teacher/sections/:employeeId/:schoolYearId', (req, res) => {
   const employeeId = req.params.employeeId;
-  console.log('Fetching sections for employee ID:', employeeId);
+  const schoolYearId = req.params.schoolYearId;
+  console.log('Fetching sections for employee ID:', employeeId, 'School Year ID:', schoolYearId);
   
   const query = `
     SELECT 
-      CONCAT('Grade',' ',b.grade_level) AS grade_level, 
-      c.section_name, 
-      IF(a.elective='0',b.subject_name,e.name) AS subject_name,
-      a.section_id,
-      a.subject_id
-    FROM SCHEDULE a 
+        CONCAT('Grade ', a.grade_level) AS grade_level, 
+        c.section_name, 
+        IF(a.elective = '0', b.subject_name, e.name) AS subject_name,
+        a.section_id,
+        a.subject_id,
+        CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range
+      FROM SCHEDULE a 
       LEFT JOIN SUBJECT b ON a.subject_id = b.subject_id 
       LEFT JOIN section c ON a.section_id = c.section_id 
       LEFT JOIN employee d ON a.teacher_id = d.employee_id 
       LEFT JOIN elective e ON a.elective = e.elective_id 
-    WHERE d.employee_id = ?`;
+      LEFT JOIN school_year f ON a.school_year_id=f.school_year_id
+      WHERE d.employee_id = ? AND a.schedule_status='Approved' AND a.school_year_id = ?`;
 
-  db.query(query, [employeeId], (err, results) => {
+  db.query(query, [employeeId, schoolYearId], (err, results) => {
     if (err) {
       console.error('Database query error:', err);
       return res.status(500).json({ error: 'Internal server error' });
@@ -346,6 +348,26 @@ app.get('/api/employee/details/:employeeId', (req, res) => {
         success: false,
         error: 'Employee not found'
       });
+    }
+  });
+});
+
+// Get school year ID from school year string
+app.get('/api/school-year-id/:schoolYear', (req, res) => {
+  const schoolYear = req.params.schoolYear;
+  
+  const query = 'SELECT school_year_id FROM school_year WHERE school_year = ?';
+  
+  db.query(query, [schoolYear], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    
+    if (results.length > 0) {
+      res.json({ id: results[0].school_year_id });
+    } else {
+      res.status(404).json({ error: 'School year not found' });
     }
   });
 });
