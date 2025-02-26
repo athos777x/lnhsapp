@@ -518,6 +518,97 @@ app.get('/api/attendance/:scheduleId/:date', (req, res) => {
   });
 });
 
+// Get student profile details
+app.get('/api/student/profile/:studentId', (req, res) => {
+  const studentId = req.params.studentId;
+  console.log('Fetching student profile for ID:', studentId);
+  
+  const query = `
+    SELECT 
+      a.student_id, 
+      CONCAT(a.lastname,', ',a.firstname,' ', IFNULL(a.middlename,'')) AS stud_name, 
+      a.contact_number, 
+      DATE_FORMAT(a.birthdate, "%M %d %Y") AS birthday, 
+      a.gender, 
+      a.age, 
+      a.email_address, 
+      a.mother_name, 
+      a.father_name, 
+      a.home_address 
+    FROM student a 
+    WHERE student_id = ?
+  `;
+
+  db.query(query, [studentId], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error',
+        details: err.message 
+      });
+    }
+    
+    if (results && results.length > 0) {
+      console.log('Student profile found:', results[0]);
+      res.json({
+        success: true,
+        data: results[0]
+      });
+    } else {
+      console.log('No student found with ID:', studentId);
+      res.status(404).json({
+        success: false,
+        error: 'Student not found'
+      });
+    }
+  });
+});
+
+// Get student ID from user ID
+app.get('/api/student/:userId', (req, res) => {
+  const userId = req.params.userId;
+  console.log('Fetching student ID for user:', userId);
+  
+  const query = `
+    SELECT a.student_id 
+    FROM student a 
+    LEFT JOIN users b ON a.user_id = b.user_id 
+    WHERE b.user_id = ?
+  `;
+  
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error',
+        details: err.message 
+      });
+    }
+    
+    console.log('Query results:', results);
+    
+    if (results && results.length > 0) {
+      const response = {
+        success: true,
+        data: {
+          student_id: results[0].student_id
+        }
+      };
+      console.log('Sending response:', response);
+      res.json(response);
+    } else {
+      console.log('No student found for user ID:', userId);
+      res.status(404).json({ 
+        success: false, 
+        error: 'Student not found',
+        details: `No student record found for user ID: ${userId}` 
+      });
+    }
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

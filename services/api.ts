@@ -126,6 +126,33 @@ interface AttendanceRecordResponse {
   error?: string;
 }
 
+interface StudentProfile {
+  student_id: number;
+  stud_name: string;
+  contact_number: string;
+  birthday: string;
+  gender: string;
+  age: number;
+  email_address: string;
+  mother_name: string;
+  father_name: string;
+  home_address: string;
+}
+
+interface StudentProfileResponse {
+  success: boolean;
+  data: StudentProfile;
+  error?: string;
+}
+
+interface StudentResponse {
+  success: boolean;
+  data: {
+    student_id: number;
+  };
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -294,6 +321,32 @@ export const api = {
       return response.data;
     } catch (error) {
       console.error('Get attendance records error:', error);
+      throw error;
+    }
+  },
+
+  // Get student profile
+  async getStudentProfile(studentId: number): Promise<StudentProfile> {
+    try {
+      const response = await axios.get<StudentProfileResponse>(
+        `${BASE_URL}/api/student/profile/${studentId}`
+      );
+      return response.data.data;
+    } catch (error) {
+      console.error('Get student profile error:', error);
+      throw error;
+    }
+  },
+
+  // Get student ID from user ID
+  async getStudentId(userId: number): Promise<number> {
+    try {
+      const response = await axios.get<StudentResponse>(
+        `${BASE_URL}/api/student/${userId}`
+      );
+      return response.data.data.student_id;
+    } catch (error) {
+      console.error('Get student ID error:', error);
       throw error;
     }
   }
