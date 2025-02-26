@@ -94,6 +94,38 @@ interface EmployeeDetailsResponse {
   error?: string;
 }
 
+interface AttendanceRecord {
+  schedule_id: number;
+  status: 'present' | 'absent' | 'late';
+  student_id: number;
+  student_name: string;
+}
+
+interface AttendanceResponse {
+  success: boolean;
+  data?: {
+    attendance_id: number;
+    schedule_id: number;
+    status: 'P' | 'A' | 'L';
+    student_id: number;
+    student_name: string;
+  };
+  error?: string;
+}
+
+interface AttendanceRecordResponse {
+  success: boolean;
+  data: {
+    attendance_id: number;
+    schedule_id: number;
+    student_id: number;
+    student_name: string;
+    status: 'present' | 'absent' | 'late';
+    date: string;
+  }[];
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -240,6 +272,28 @@ export const api = {
       return response.data.id;
     } catch (error) {
       console.error('Get school year ID error:', error);
+      throw error;
+    }
+  },
+
+  // Record student attendance
+  async recordAttendance(data: AttendanceRecord): Promise<AttendanceResponse> {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/attendance/record`, data);
+      return response.data;
+    } catch (error) {
+      console.error('Record attendance error:', error);
+      throw error;
+    }
+  },
+
+  // Get attendance records for a schedule and date
+  async getAttendanceRecords(scheduleId: number, date: string): Promise<AttendanceRecordResponse> {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/attendance/${scheduleId}/${date}`);
+      return response.data;
+    } catch (error) {
+      console.error('Get attendance records error:', error);
       throw error;
     }
   }

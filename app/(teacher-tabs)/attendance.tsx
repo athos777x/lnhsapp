@@ -56,6 +56,9 @@ export default function TeacherAttendance() {
   const { userData } = useAuth();
   const router = useRouter();
 
+  // Add new state for tracking the current date
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+
   // Add status message handler
   const showStatusMessage = (message: string, color: string) => {
     setStatusMessage({ text: message, color: color });
@@ -94,37 +97,80 @@ export default function TeacherAttendance() {
     }
   };
 
-  const handleSubjectPress = (subject: Subject) => {
+  const handleSubjectPress = async (subject: Subject) => {
     console.log('Selected subject:', subject);
     console.log('Current students:', students);
     setSelectedSubject(subject);
+
+    try {
+      // Fetch existing attendance records for this subject and date
+      const attendanceRecords = await api.getAttendanceRecords(subject.subject_id, currentDate);
+      
+      // Update students with their attendance status
+      const updatedStudents = students.map(student => {
+        const record = attendanceRecords.data.find(r => r.student_id === student.student_id);
+        return {
+          ...student,
+          attendance_status: record ? record.status : undefined
+        };
+      });
+      
+      setStudents(updatedStudents);
+    } catch (error) {
+      console.error('Error fetching attendance records:', error);
+      showStatusMessage('Failed to load attendance records', '#dc3545');
+    }
   };
 
   const handleAttendanceStatus = async (student: Student, status: 'present' | 'late' | 'absent') => {
     try {
-      // Toggle attendance status
-      setStudents(students.map(s => {
+      if (!selectedSubject) {
+        showStatusMessage('Please select a subject first', '#dc3545');
+        return;
+      }
+
+      // Toggle attendance status in UI
+      const updatedStudents = students.map(s => {
         if (s.id === student.id) {
           // If the same status is clicked again, remove it
           const newStatus = s.attendance_status === status ? undefined : status;
-          // Show appropriate status message with color
-          if (newStatus === undefined) {
-            showStatusMessage(`Unmarked ${student.stud_name}`, '#6c757d'); // Gray for unmark
-          } else {
-            const statusColors = {
-              present: '#28a745',
-              late: '#ffc107',
-              absent: '#dc3545'
-            };
-            showStatusMessage(`Marked ${student.stud_name} as ${status}`, statusColors[status]);
-          }
           return { ...s, attendance_status: newStatus };
         }
         return s;
-      }));
+      });
+      setStudents(updatedStudents);
+
+      // If we're removing the status (toggling off), don't make API call
+      if (updatedStudents.find(s => s.id === student.id)?.attendance_status === undefined) {
+        showStatusMessage(`Unmarked ${student.stud_name}`, '#6c757d');
+        return;
+      }
+
+      // Make API call to record attendance
+      const response = await api.recordAttendance({
+        schedule_id: selectedSubject.subject_id,
+        status,
+        student_id: student.student_id,
+        student_name: student.stud_name
+      });
+
+      if (response.success) {
+        const statusColors = {
+          present: '#28a745',
+          late: '#ffc107',
+          absent: '#dc3545'
+        };
+        showStatusMessage(`Marked ${student.stud_name} as ${status}`, statusColors[status]);
+      } else {
+        // If API call fails, revert the UI change
+        setStudents(students);
+        showStatusMessage('Failed to update attendance', '#dc3545');
+      }
     } catch (err) {
-      console.error(err);
-      showStatusMessage('Failed to update attendance', '#dc3545'); // Red for error
+      console.error('Error updating attendance:', err);
+      // Revert UI change on error
+      setStudents(students);
+      showStatusMessage('Failed to update attendance', '#dc3545');
     }
   };
 

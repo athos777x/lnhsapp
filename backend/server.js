@@ -370,6 +370,154 @@ app.get('/api/school-year-id/:schoolYear', (req, res) => {
   });
 });
 
+// Record student attendance
+app.post('/api/attendance/record', (req, res) => {
+  const { schedule_id, status, student_id, student_name } = req.body;
+
+  if (!schedule_id || !status || !student_id || !student_name) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing required fields' 
+    });
+  }
+
+  // Map the status to single character values
+  const statusMap = {
+    'present': 'P',
+    'absent': 'A',
+    'late': 'L'
+  };
+
+  const dbStatus = statusMap[status];
+  if (!dbStatus) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid status. Must be present, absent, or late'
+    });
+  }
+
+  // First check if an attendance record exists for today
+  const checkQuery = `
+    SELECT attendance_id 
+    FROM attendance 
+    WHERE schedule_id = ? 
+    AND student_id = ? 
+    AND DATE(date) = CURDATE()
+  `;
+
+  db.query(checkQuery, [schedule_id, student_id], (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to check attendance record',
+        details: err.message 
+      });
+    }
+
+    if (results.length > 0) {
+      // Update existing record
+      const updateQuery = `
+        UPDATE attendance 
+        SET status = ?, 
+            remarks = CURRENT_TIMESTAMP 
+        WHERE attendance_id = ?
+      `;
+
+      db.query(updateQuery, [dbStatus, results[0].attendance_id], (err, updateResult) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).json({ 
+            success: false,
+            error: 'Failed to update attendance',
+            details: err.message 
+          });
+        }
+
+        res.json({
+          success: true,
+          data: {
+            attendance_id: results[0].attendance_id,
+            schedule_id,
+            status: dbStatus,
+            student_id,
+            student_name
+          }
+        });
+      });
+    } else {
+      // Insert new record
+      const insertQuery = `
+        INSERT INTO attendance (schedule_id, date, status, student_id, student_name, remarks) 
+        VALUES (?, NOW(), ?, ?, ?, CURRENT_TIMESTAMP)
+      `;
+
+      db.query(insertQuery, [schedule_id, dbStatus, student_id, student_name], (err, insertResult) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).json({ 
+            success: false,
+            error: 'Failed to record attendance',
+            details: err.message 
+          });
+        }
+
+        res.json({
+          success: true,
+          data: {
+            attendance_id: insertResult.insertId,
+            schedule_id,
+            status: dbStatus,
+            student_id,
+            student_name
+          }
+        });
+      });
+    }
+  });
+});
+
+// Get attendance records for a schedule and date
+app.get('/api/attendance/:scheduleId/:date', (req, res) => {
+  const { scheduleId, date } = req.params;
+  
+  const query = `
+    SELECT attendance_id, schedule_id, student_id, student_name, status, 
+           DATE_FORMAT(date, '%Y-%m-%d') as date
+    FROM attendance 
+    WHERE schedule_id = ? 
+    AND DATE(date) = ?
+  `;
+
+  db.query(query, [scheduleId, date], (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch attendance records',
+        details: err.message 
+      });
+    }
+
+    // Map the single-character status back to full words
+    const statusMap = {
+      'P': 'present',
+      'A': 'absent',
+      'L': 'late'
+    };
+
+    const formattedResults = results.map(record => ({
+      ...record,
+      status: statusMap[record.status] || record.status
+    }));
+
+    res.json({
+      success: true,
+      data: formattedResults
+    });
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
