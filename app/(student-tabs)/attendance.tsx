@@ -1,7 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar } from 'react-native-calendars';
+import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Mock student data
 const STUDENT_INFO = {
@@ -31,41 +33,90 @@ type DailySubjectAttendance = {
   time: string;
 };
 
+type StudentDailyAttendance = {
+  section_grade: string;
+  school_year: string;
+  subject_name: string;
+  time_range: string;
+  status: 'Present' | 'Absent' | 'Late';
+};
+
 export default function AttendanceScreen() {
   const [date, setDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedDateAttendance, setSelectedDateAttendance] = useState<DailySubjectAttendance[]>([
-    { id: 1, name: 'Mathematics', status: 'pending', time: '8:00 AM' },
-    { id: 2, name: 'Science', status: 'pending', time: '9:00 AM' },
-    { id: 3, name: 'English', status: 'pending', time: '10:00 AM' },
-    { id: 4, name: 'History', status: 'pending', time: '11:00 AM' },
-  ]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [studentInfo, setStudentInfo] = useState<{
+    grade: string;
+    section: string;
+    schoolYear: string;
+  } | null>(null);
+  const [dailyAttendance, setDailyAttendance] = useState<StudentDailyAttendance[]>([]);
+  const { userData } = useAuth();
 
-  // Mock data for overall attendance
-  const subjects: Subject[] = [
-    { id: 1, name: 'Mathematics', present: 15, total: 20 },
-    { id: 2, name: 'Science', present: 18, total: 20 },
-    { id: 3, name: 'English', present: 17, total: 20 },
-    { id: 4, name: 'History', present: 19, total: 20 },
-  ];
+  const getDayName = (date: Date) => {
+    return date.toLocaleDateString('en-US', { weekday: 'long' });
+  };
 
-  const recentAttendance: AttendanceDay[] = [
-    { date: '2024-01-31', status: 'present' },
-    { date: '2024-01-30', status: 'present' },
-    { date: '2024-01-29', status: 'absent' },
-    { date: '2024-01-28', status: 'present' },
-    { date: '2024-01-27', status: 'present' },
-  ];
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { 
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
 
-  const getStatusColor = (status: AttendanceStatus): string => {
+  const fetchStudentAttendance = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (!userData?.userId) {
+        throw new Error('User not logged in');
+      }
+
+      // First get the student ID
+      const studentId = await api.getStudentId(userData.userId);
+      
+      // Get attendance for the selected date
+      const dayName = getDayName(date);
+      const formattedDate = formatDate(date);
+      
+      const attendanceData = await api.getStudentDailyAttendance(
+        studentId,
+        dayName,
+        formattedDate
+      );
+
+      if (attendanceData.length > 0) {
+        // Set student info from the first record
+        setStudentInfo({
+          grade: attendanceData[0].section_grade,
+          section: '',  // Add section if available in the data
+          schoolYear: attendanceData[0].school_year
+        });
+      }
+
+      setDailyAttendance(attendanceData);
+    } catch (error) {
+      console.error('Error fetching student attendance:', error);
+      setError('Failed to load student information');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudentAttendance();
+  }, [date, userData]);
+
+  const getStatusColor = (status: string): string => {
     switch (status) {
-      case 'present':
+      case 'Present':
         return '#28a745';
-      case 'absent':
+      case 'Absent':
         return '#dc3545';
-      case 'pending':
-        return '#6c757d';
-      case 'late':
+      case 'Late':
         return '#ffc107';
       default:
         return '#6c757d';
@@ -148,19 +199,10 @@ export default function AttendanceScreen() {
     // Don't allow future dates
     if (newDate <= new Date()) {
       setDate(newDate);
-      // Update attendance statuses based on the selected date
-      const updatedAttendance: DailySubjectAttendance[] = [
-        { id: 1, name: 'Mathematics', status: getSubjectStatus('8:00 AM', newDate), time: '8:00 AM' },
-        { id: 2, name: 'Science', status: getSubjectStatus('9:00 AM', newDate), time: '9:00 AM' },
-        { id: 3, name: 'English', status: getSubjectStatus('10:00 AM', newDate), time: '10:00 AM' },
-        { id: 4, name: 'History', status: getSubjectStatus('11:00 AM', newDate), time: '11:00 AM' },
-      ];
-      setSelectedDateAttendance(updatedAttendance);
     }
   };
 
   const handleDateSelect = (day: any) => {
-    // Create date at start of day in local timezone
     const selectedDate = new Date(day.year, day.month - 1, day.day);
     const currentDate = new Date();
     
@@ -168,34 +210,43 @@ export default function AttendanceScreen() {
     if (selectedDate <= currentDate) {
       setShowCalendar(false);
       setDate(selectedDate);
-      // Update attendance statuses based on the selected date
-      const updatedAttendance: DailySubjectAttendance[] = [
-        { id: 1, name: 'Mathematics', status: getSubjectStatus('8:00 AM', selectedDate), time: '8:00 AM' },
-        { id: 2, name: 'Science', status: getSubjectStatus('9:00 AM', selectedDate), time: '9:00 AM' },
-        { id: 3, name: 'English', status: getSubjectStatus('10:00 AM', selectedDate), time: '10:00 AM' },
-        { id: 4, name: 'History', status: getSubjectStatus('11:00 AM', selectedDate), time: '11:00 AM' },
-      ];
-      setSelectedDateAttendance(updatedAttendance);
     }
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#28a745" />
+        <Text style={styles.loadingText}>Loading attendance...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
       {/* Student Info Card */}
-      <View style={styles.studentInfoCard}>
-        <View style={styles.studentInfoRow}>
-          <MaterialIcons name="school" size={24} color="#28a745" />
-          <Text style={styles.studentInfoText}>
-            Grade {STUDENT_INFO.grade} - {STUDENT_INFO.section}
-          </Text>
+      {studentInfo && (
+        <View style={styles.studentInfoCard}>
+          <View style={styles.studentInfoRow}>
+            <MaterialIcons name="school" size={24} color="#28a745" />
+            <Text style={styles.studentInfoText}>
+              {studentInfo.grade}
+            </Text>
+          </View>
+          <View style={styles.studentInfoRow}>
+            <MaterialIcons name="event" size={24} color="#28a745" />
+            <Text style={styles.studentInfoText}>
+              {studentInfo.schoolYear}
+            </Text>
+          </View>
         </View>
-        <View style={styles.studentInfoRow}>
-          <MaterialIcons name="event" size={24} color="#28a745" />
-          <Text style={styles.studentInfoText}>
-            School Year {STUDENT_INFO.schoolYear}
-          </Text>
+      )}
+
+      {error && (
+        <View style={styles.errorCard}>
+          <Text style={styles.errorText}>{error}</Text>
         </View>
-      </View>
+      )}
 
       {/* Date Selector */}
       <View style={styles.datePickerCard}>
@@ -267,46 +318,27 @@ export default function AttendanceScreen() {
 
         {/* Daily Subject Attendance */}
         <View style={styles.dailyAttendanceContainer}>
-          {selectedDateAttendance.map((subject) => (
-            <View key={subject.id} style={styles.dailyAttendanceItem}>
+          {dailyAttendance.map((subject, index) => (
+            <View key={index} style={styles.dailyAttendanceItem}>
               <View style={styles.subjectInfo}>
-                <Text style={styles.subjectName}>{subject.name}</Text>
-                <Text style={styles.subjectTime}>{subject.time}</Text>
+                <Text style={styles.subjectName}>{subject.subject_name}</Text>
+                <Text style={styles.subjectTime}>{subject.time_range}</Text>
               </View>
               <View style={[styles.statusBadge, { backgroundColor: getStatusColor(subject.status) }]}>
-                <Text style={styles.statusBadgeText}>
-                  {subject.status.charAt(0).toUpperCase() + subject.status.slice(1)}
-                </Text>
+                <Text style={styles.statusBadgeText}>{subject.status}</Text>
               </View>
             </View>
           ))}
+          {dailyAttendance.length === 0 && (
+            <Text style={styles.noDataText}>No attendance records for this date</Text>
+          )}
         </View>
       </View>
 
       {/* Subject-wise Overall Attendance */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Subject Overall Attendance</Text>
-        {subjects.map((subject) => (
-          <View key={subject.id} style={styles.subjectCard}>
-            <View style={styles.subjectHeader}>
-              <Text style={styles.subjectName}>{subject.name}</Text>
-              <Text style={styles.percentageText}>
-                {calculatePercentage(subject.present, subject.total)}%
-              </Text>
-            </View>
-            <View style={styles.attendanceBar}>
-              <View 
-                style={[
-                  styles.attendanceProgress, 
-                  { width: `${(subject.present / subject.total) * 100}%` }
-                ]} 
-              />
-            </View>
-            <Text style={styles.attendanceText}>
-              {subject.present} present out of {subject.total} classes
-            </Text>
-          </View>
-        ))}
+        {/* ... */}
       </View>
 
       {/* Overall Attendance Summary */}
@@ -536,4 +568,35 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorCard: {
+    backgroundColor: '#fee',
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fcc',
+  },
+  errorText: {
+    color: '#dc3545',
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  noDataText: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 14,
+    padding: 20,
+  }
 });

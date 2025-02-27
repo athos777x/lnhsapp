@@ -609,6 +609,50 @@ app.get('/api/student/:userId', (req, res) => {
   });
 });
 
+// Get student daily attendance
+app.get('/api/student/attendance/:studentId/:day/:date', (req, res) => {
+  const { studentId, day, date } = req.params;
+  console.log('Fetching student attendance for:', { studentId, day, date });
+  
+  const query = `
+    SELECT 
+      CONCAT('Grade', ' - ', a.grade_level) AS section_grade, 
+      CONCAT('School Year', ' ', e.school_year) AS school_year, 
+      c.subject_name, 
+      CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range,
+      CASE 
+        WHEN b.status = 'P' THEN 'Present'
+        WHEN b.status = 'A' THEN 'Absent'
+        WHEN b.status = 'L' THEN 'Late'
+      END AS status 
+    FROM schedule a 
+    LEFT JOIN attendance b ON a.schedule_id = b.schedule_id 
+    LEFT JOIN subject c ON a.subject_id = c.subject_id 
+    LEFT JOIN section d ON a.section_id = d.section_id 
+    LEFT JOIN school_year e ON a.school_year_id = e.school_year_id 
+    WHERE b.student_id = ? 
+    AND a.day = ? 
+    AND DATE_FORMAT(b.date, '%M %d, %Y') = ?
+  `;
+
+  db.query(query, [studentId, day, date], (err, results) => {
+    if (err) {
+      console.error('Database query error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error',
+        details: err.message 
+      });
+    }
+    
+    console.log('Student attendance results:', results);
+    res.json({
+      success: true,
+      data: results
+    });
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

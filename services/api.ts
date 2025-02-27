@@ -153,6 +153,20 @@ interface StudentResponse {
   error?: string;
 }
 
+interface StudentDailyAttendance {
+  section_grade: string;
+  school_year: string;
+  subject_name: string;
+  time_range: string;
+  status: 'Present' | 'Absent' | 'Late';
+}
+
+interface StudentDailyAttendanceResponse {
+  success: boolean;
+  data: StudentDailyAttendance[];
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -347,6 +361,23 @@ export const api = {
       return response.data.data.student_id;
     } catch (error) {
       console.error('Get student ID error:', error);
+      throw error;
+    }
+  },
+
+  // Get student daily attendance
+  async getStudentDailyAttendance(
+    studentId: number,
+    day: string,
+    date: string
+  ): Promise<StudentDailyAttendance[]> {
+    try {
+      const response = await axios.get<StudentDailyAttendanceResponse>(
+        `${BASE_URL}/api/student/attendance/${studentId}/${day}/${encodeURIComponent(date)}`
+      );
+      return response.data.data;
+    } catch (error) {
+      console.error('Get student daily attendance error:', error);
       throw error;
     }
   }
