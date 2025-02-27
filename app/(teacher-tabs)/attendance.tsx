@@ -148,7 +148,7 @@ export default function TeacherAttendance() {
 
       // Make API call to record attendance
       const response = await api.recordAttendance({
-        schedule_id: selectedSubject.subject_id,
+        subject_id: selectedSubject.subject_id,
         status,
         student_id: student.student_id,
         student_name: student.stud_name

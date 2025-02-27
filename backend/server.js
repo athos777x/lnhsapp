@@ -372,9 +372,11 @@ app.get('/api/school-year-id/:schoolYear', (req, res) => {
 
 // Record student attendance
 app.post('/api/attendance/record', (req, res) => {
-  const { schedule_id, status, student_id, student_name } = req.body;
+  const { subject_id, status, student_id, student_name } = req.body;
+  console.log('Received attendance record request:', { subject_id, status, student_id, student_name });
 
-  if (!schedule_id || !status || !student_id || !student_name) {
+  if (!subject_id || !status || !student_id || !student_name) {
+    console.log('Missing required fields:', { subject_id, status, student_id, student_name });
     return res.status(400).json({ 
       success: false,
       error: 'Missing required fields' 
@@ -389,7 +391,10 @@ app.post('/api/attendance/record', (req, res) => {
   };
 
   const dbStatus = statusMap[status];
+  console.log('Mapped status:', { original: status, mapped: dbStatus });
+  
   if (!dbStatus) {
+    console.log('Invalid status value:', status);
     return res.status(400).json({
       success: false,
       error: 'Invalid status. Must be present, absent, or late'
@@ -400,20 +405,25 @@ app.post('/api/attendance/record', (req, res) => {
   const checkQuery = `
     SELECT attendance_id 
     FROM attendance 
-    WHERE schedule_id = ? 
+    WHERE (subject_id = ? OR schedule_id = ?)
     AND student_id = ? 
     AND DATE(date) = CURDATE()
   `;
 
-  db.query(checkQuery, [schedule_id, student_id], (err, results) => {
+  console.log('Checking for existing record with query:', checkQuery);
+  console.log('Query parameters:', [subject_id, subject_id, student_id]);
+
+  db.query(checkQuery, [subject_id, subject_id, student_id], (err, results) => {
     if (err) {
-      console.error('Database error:', err);
+      console.error('Database error during check:', err);
       return res.status(500).json({ 
         success: false,
         error: 'Failed to check attendance record',
         details: err.message 
       });
     }
+
+    console.log('Check query results:', results);
 
     if (results.length > 0) {
       // Update existing record
@@ -424,9 +434,12 @@ app.post('/api/attendance/record', (req, res) => {
         WHERE attendance_id = ?
       `;
 
+      console.log('Updating existing record with query:', updateQuery);
+      console.log('Update parameters:', [dbStatus, results[0].attendance_id]);
+
       db.query(updateQuery, [dbStatus, results[0].attendance_id], (err, updateResult) => {
         if (err) {
-          console.error('Database error:', err);
+          console.error('Database error during update:', err);
           return res.status(500).json({ 
             success: false,
             error: 'Failed to update attendance',
@@ -434,11 +447,12 @@ app.post('/api/attendance/record', (req, res) => {
           });
         }
 
+        console.log('Update successful:', updateResult);
         res.json({
           success: true,
           data: {
             attendance_id: results[0].attendance_id,
-            schedule_id,
+            subject_id,
             status: dbStatus,
             student_id,
             student_name
@@ -448,13 +462,18 @@ app.post('/api/attendance/record', (req, res) => {
     } else {
       // Insert new record
       const insertQuery = `
-        INSERT INTO attendance (schedule_id, date, status, student_id, student_name, remarks) 
-        VALUES (?, NOW(), ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO attendance (subject_id, schedule_id, date, status, student_id, student_name, remarks) 
+        VALUES (?, ?, NOW(), ?, ?, ?, CURRENT_TIMESTAMP)
       `;
 
-      db.query(insertQuery, [schedule_id, dbStatus, student_id, student_name], (err, insertResult) => {
+      // Use subject_id for both subject_id and schedule_id to ensure compatibility
+      console.log('Inserting new record with query:', insertQuery);
+      console.log('Insert parameters:', [subject_id, subject_id, dbStatus, student_id, student_name]);
+
+      db.query(insertQuery, [subject_id, subject_id, dbStatus, student_id, student_name], (err, insertResult) => {
         if (err) {
-          console.error('Database error:', err);
+          console.error('Database error during insert:', err);
+          console.error('Error details:', err.message);
           return res.status(500).json({ 
             success: false,
             error: 'Failed to record attendance',
@@ -462,11 +481,12 @@ app.post('/api/attendance/record', (req, res) => {
           });
         }
 
+        console.log('Insert successful:', insertResult);
         res.json({
           success: true,
           data: {
             attendance_id: insertResult.insertId,
-            schedule_id,
+            subject_id,
             status: dbStatus,
             student_id,
             student_name
@@ -616,7 +636,7 @@ app.get('/api/student/attendance/:studentId/:day/:date', (req, res) => {
   
   const query = `
     SELECT 
-      CONCAT('Grade', ' - ', a.grade_level) AS section_grade, 
+      CONCAT('Grade', ' ', a.grade_level, ' - ', d.section_name) AS section_grade,
       CONCAT('School Year', ' ', e.school_year) AS school_year, 
       c.subject_name, 
       CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range,
@@ -650,6 +670,58 @@ app.get('/api/student/attendance/:studentId/:day/:date', (req, res) => {
       success: true,
       data: results
     });
+  });
+});
+
+// Get current attendance status for a student
+app.get('/api/attendance/status/:subjectId/:studentId', (req, res) => {
+  const { subjectId, studentId } = req.params;
+  console.log('Checking attendance status for:', { subjectId, studentId });
+  
+  const query = `
+    SELECT attendance_id, subject_id, student_id, student_name, status, 
+           DATE_FORMAT(date, '%Y-%m-%d') as date
+    FROM attendance 
+    WHERE subject_id = ? 
+    AND student_id = ? 
+    AND DATE(date) = CURDATE()
+  `;
+
+  db.query(query, [subjectId, studentId], (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch attendance status',
+        details: err.message 
+      });
+    }
+
+    console.log('Attendance status results:', results);
+
+    if (results.length > 0) {
+      // Map the single-character status back to full words
+      const statusMap = {
+        'P': 'present',
+        'A': 'absent',
+        'L': 'late'
+      };
+
+      const record = results[0];
+      res.json({
+        success: true,
+        data: {
+          ...record,
+          status: statusMap[record.status] || record.status
+        }
+      });
+    } else {
+      res.json({
+        success: true,
+        data: null,
+        message: 'No attendance record found for today'
+      });
+    }
   });
 });
 

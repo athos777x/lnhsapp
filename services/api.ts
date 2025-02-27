@@ -95,7 +95,7 @@ interface EmployeeDetailsResponse {
 }
 
 interface AttendanceRecord {
-  schedule_id: number;
+  subject_id: number;
   status: 'present' | 'absent' | 'late';
   student_id: number;
   student_name: string;
@@ -105,7 +105,7 @@ interface AttendanceResponse {
   success: boolean;
   data?: {
     attendance_id: number;
-    schedule_id: number;
+    subject_id: number;
     status: 'P' | 'A' | 'L';
     student_id: number;
     student_name: string;
@@ -117,7 +117,7 @@ interface AttendanceRecordResponse {
   success: boolean;
   data: {
     attendance_id: number;
-    schedule_id: number;
+    subject_id: number;
     student_id: number;
     student_name: string;
     status: 'present' | 'absent' | 'late';
@@ -329,9 +329,9 @@ export const api = {
   },
 
   // Get attendance records for a schedule and date
-  async getAttendanceRecords(scheduleId: number, date: string): Promise<AttendanceRecordResponse> {
+  async getAttendanceRecords(subjectId: number, date: string): Promise<AttendanceRecordResponse> {
     try {
-      const response = await axios.get(`${BASE_URL}/api/attendance/${scheduleId}/${date}`);
+      const response = await axios.get(`${BASE_URL}/api/attendance/${subjectId}/${date}`);
       return response.data;
     } catch (error) {
       console.error('Get attendance records error:', error);
