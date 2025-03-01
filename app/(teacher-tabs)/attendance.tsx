@@ -25,6 +25,7 @@ type Subject = {
   subject_id: number;
   subject_name: string;
   time_range: string;
+  day: string;
 };
 
 type Student = {
@@ -103,18 +104,25 @@ export default function TeacherAttendance() {
     setSelectedSubject(subject);
 
     try {
+      // Get the current date in YYYY-MM-DD format
+      const formattedDate = currentDate;
+      console.log('Fetching attendance records for date:', formattedDate);
+      
       // Fetch existing attendance records for this subject and date
-      const attendanceRecords = await api.getAttendanceRecords(subject.subject_id, currentDate);
+      const attendanceRecords = await api.getAttendanceRecords(subject.subject_id, formattedDate);
+      console.log('Received attendance records:', attendanceRecords);
       
       // Update students with their attendance status
       const updatedStudents = students.map(student => {
         const record = attendanceRecords.data.find(r => r.student_id === student.student_id);
+        console.log(`Student ${student.student_id} attendance record:`, record);
         return {
           ...student,
           attendance_status: record ? record.status : undefined
         };
       });
       
+      console.log('Updated students with attendance status:', updatedStudents);
       setStudents(updatedStudents);
     } catch (error) {
       console.error('Error fetching attendance records:', error);
@@ -243,7 +251,8 @@ export default function TeacherAttendance() {
           section.subjects.push({
             subject_id: item.subject_id,
             subject_name: item.subject_name,
-            time_range: item.time_range
+            time_range: item.time_range,
+            day: item.day
           });
         }
       });
@@ -403,6 +412,7 @@ export default function TeacherAttendance() {
           <Text style={styles.cardTitle}>{item.subject_name}</Text>
           <View style={styles.gradeBadge}>
             <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
+            <Text style={styles.gradeBadgeText}>{item.day}</Text>
           </View>
         </View>
         <Ionicons 

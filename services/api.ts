@@ -43,6 +43,7 @@ interface TeacherSection {
   section_id: number;
   subject_id: number;
   time_range: string;
+  day: string;
 }
 
 type Subject = {
@@ -118,6 +119,7 @@ interface AttendanceRecordResponse {
   data: {
     attendance_id: number;
     subject_id: number;
+    schedule_id: number;
     student_id: number;
     student_name: string;
     status: 'present' | 'absent' | 'late';
@@ -158,7 +160,7 @@ interface StudentDailyAttendance {
   school_year: string;
   subject_name: string;
   time_range: string;
-  status: 'Present' | 'Absent' | 'Late';
+  attendance_status: 'Present' | 'Absent' | 'Late' | 'No Record';
 }
 
 interface StudentDailyAttendanceResponse {

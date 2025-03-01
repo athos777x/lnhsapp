@@ -208,7 +208,8 @@ app.get('/api/teacher/sections/:employeeId/:schoolYearId', (req, res) => {
         IF(a.elective = '0', b.subject_name, e.name) AS subject_name,
         a.section_id,
         a.subject_id,
-        CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range
+        CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range,
+        a.day
       FROM SCHEDULE a 
       LEFT JOIN SUBJECT b ON a.subject_id = b.subject_id 
       LEFT JOIN section c ON a.section_id = c.section_id 
@@ -500,16 +501,20 @@ app.post('/api/attendance/record', (req, res) => {
 // Get attendance records for a schedule and date
 app.get('/api/attendance/:scheduleId/:date', (req, res) => {
   const { scheduleId, date } = req.params;
+  console.log('Fetching attendance records for:', { scheduleId, date });
   
   const query = `
-    SELECT attendance_id, schedule_id, student_id, student_name, status, 
+    SELECT attendance_id, subject_id, schedule_id, student_id, student_name, status, 
            DATE_FORMAT(date, '%Y-%m-%d') as date
     FROM attendance 
-    WHERE schedule_id = ? 
+    WHERE (subject_id = ? OR schedule_id = ?) 
     AND DATE(date) = ?
   `;
 
-  db.query(query, [scheduleId, date], (err, results) => {
+  console.log('Query:', query);
+  console.log('Parameters:', [scheduleId, scheduleId, date]);
+
+  db.query(query, [scheduleId, scheduleId, date], (err, results) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ 
@@ -518,6 +523,8 @@ app.get('/api/attendance/:scheduleId/:date', (req, res) => {
         details: err.message 
       });
     }
+
+    console.log('Attendance records found:', results);
 
     // Map the single-character status back to full words
     const statusMap = {
@@ -530,6 +537,8 @@ app.get('/api/attendance/:scheduleId/:date', (req, res) => {
       ...record,
       status: statusMap[record.status] || record.status
     }));
+
+    console.log('Formatted results:', formattedResults);
 
     res.json({
       success: true,
@@ -636,26 +645,28 @@ app.get('/api/student/attendance/:studentId/:day/:date', (req, res) => {
   
   const query = `
     SELECT 
-      CONCAT('Grade', ' ', a.grade_level, ' - ', d.section_name) AS section_grade,
-      CONCAT('School Year', ' ', e.school_year) AS school_year, 
+      CONCAT('Grade ', a.grade_level, ' - ', d.section_name) AS section_grade,
+      CONCAT('School Year ', e.school_year) AS school_year, 
       c.subject_name, 
       CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range,
       CASE 
         WHEN b.status = 'P' THEN 'Present'
         WHEN b.status = 'A' THEN 'Absent'
         WHEN b.status = 'L' THEN 'Late'
-      END AS status 
-    FROM schedule a 
-    LEFT JOIN attendance b ON a.schedule_id = b.schedule_id 
+        ELSE 'No Record'
+      END AS attendance_status
+    FROM schedule a
+    LEFT JOIN attendance b 
+      ON a.schedule_id = b.schedule_id 
+      AND b.student_id = ?
+      AND DATE_FORMAT(b.date, '%M %d, %Y') = ?
     LEFT JOIN subject c ON a.subject_id = c.subject_id 
     LEFT JOIN section d ON a.section_id = d.section_id 
     LEFT JOIN school_year e ON a.school_year_id = e.school_year_id 
-    WHERE b.student_id = ? 
-    AND a.day = ? 
-    AND DATE_FORMAT(b.date, '%M %d, %Y') = ?
+    WHERE a.day = ? AND a.schedule_status = 'Approved' AND b.status != ''
   `;
 
-  db.query(query, [studentId, day, date], (err, results) => {
+  db.query(query, [studentId, date, day], (err, results) => {
     if (err) {
       console.error('Database query error:', err);
       return res.status(500).json({ 

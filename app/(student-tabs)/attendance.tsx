@@ -38,7 +38,7 @@ type StudentDailyAttendance = {
   school_year: string;
   subject_name: string;
   time_range: string;
-  status: 'Present' | 'Absent' | 'Late';
+  attendance_status: 'Present' | 'Absent' | 'Late' | 'No Record';
 };
 
 export default function AttendanceScreen() {
@@ -324,8 +324,8 @@ export default function AttendanceScreen() {
                 <Text style={styles.subjectName}>{subject.subject_name}</Text>
                 <Text style={styles.subjectTime}>{subject.time_range}</Text>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(subject.status) }]}>
-                <Text style={styles.statusBadgeText}>{subject.status}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(subject.attendance_status) }]}>
+                <Text style={styles.statusBadgeText}>{subject.attendance_status}</Text>
               </View>
             </View>
           ))}
