@@ -137,6 +137,15 @@ export default function TeacherAttendance() {
         return;
       }
 
+      // Check if the selected subject's day matches today's day
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const currentDay = days[new Date().getDay()];
+      
+      if (selectedSubject.day !== currentDay) {
+        showStatusMessage(`No schedule for ${selectedSubject.subject_name} on ${currentDay}`, '#dc3545');
+        return;
+      }
+
       // Toggle attendance status in UI
       const updatedStudents = students.map(s => {
         if (s.id === student.id) {
@@ -172,13 +181,16 @@ export default function TeacherAttendance() {
       } else {
         // If API call fails, revert the UI change
         setStudents(students);
-        showStatusMessage('Failed to update attendance', '#dc3545');
+        showStatusMessage(response.error || 'Failed to update attendance', '#dc3545');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating attendance:', err);
       // Revert UI change on error
       setStudents(students);
-      showStatusMessage('Failed to update attendance', '#dc3545');
+      
+      // Display error message from API if available
+      const errorMessage = err.response?.data?.error || 'Failed to update attendance';
+      showStatusMessage(errorMessage, '#dc3545');
     }
   };
 
@@ -399,30 +411,42 @@ export default function TeacherAttendance() {
     </TouchableOpacity>
   );
 
-  const renderSubject = ({ item }: { item: Subject }) => (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        selectedSubject?.subject_id === item.subject_id && styles.selectedCard,
-      ]}
-      onPress={() => handleSubjectPress(item)}
-    >
-      <View style={styles.cardContent}>
-        <View>
-          <Text style={styles.cardTitle}>{item.subject_name}</Text>
-          <View style={styles.gradeBadge}>
-            <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
-            <Text style={styles.gradeBadgeText}>{item.day}</Text>
+  const renderSubject = ({ item }: { item: Subject }) => {
+    // Check if the subject's day matches today's day
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = days[new Date().getDay()];
+    const hasScheduleToday = item.day === currentDay;
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.card,
+          selectedSubject?.subject_id === item.subject_id && styles.selectedCard,
+          !hasScheduleToday && styles.noScheduleCard
+        ]}
+        onPress={() => handleSubjectPress(item)}
+      >
+        <View style={styles.cardContent}>
+          <View>
+            <Text style={styles.cardTitle}>{item.subject_name}</Text>
+            <View style={styles.gradeBadge}>
+              <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
+              {hasScheduleToday ? (
+                <Text style={styles.gradeBadgeText}>{item.day}</Text>
+              ) : (
+                <Text style={styles.noScheduleText}>No schedule today</Text>
+              )}
+            </View>
           </View>
+          <Ionicons 
+            name="chevron-forward" 
+            size={20} 
+            color={selectedSubject?.subject_id === item.subject_id ? "#28a745" : "#666"} 
+          />
         </View>
-        <Ionicons 
-          name="chevron-forward" 
-          size={20} 
-          color={selectedSubject?.subject_id === item.subject_id ? "#28a745" : "#666"} 
-        />
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderStudent = ({ item }: { item: Student }) => {
     console.log('Rendering student:', item);
@@ -851,5 +875,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  noScheduleCard: {
+    backgroundColor: '#f8f9fa',
+    borderColor: '#dee2e6',
+    borderStyle: 'dashed',
+  },
+  noScheduleText: {
+    color: '#dc3545',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 4,
   },
 });

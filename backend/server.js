@@ -384,117 +384,154 @@ app.post('/api/attendance/record', (req, res) => {
     });
   }
 
-  // Map the status to single character values
-  const statusMap = {
-    'present': 'P',
-    'absent': 'A',
-    'late': 'L'
-  };
+  // Get current day of the week
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const currentDay = days[new Date().getDay()];
+  console.log('Current day:', currentDay);
 
-  const dbStatus = statusMap[status];
-  console.log('Mapped status:', { original: status, mapped: dbStatus });
-  
-  if (!dbStatus) {
-    console.log('Invalid status value:', status);
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid status. Must be present, absent, or late'
-    });
-  }
-
-  // First check if an attendance record exists for today
-  const checkQuery = `
-    SELECT attendance_id 
-    FROM attendance 
-    WHERE (subject_id = ? OR schedule_id = ?)
-    AND student_id = ? 
-    AND DATE(date) = CURDATE()
+  // First check if there's a schedule for today
+  const scheduleQuery = `
+    SELECT schedule_id, day 
+    FROM schedule 
+    WHERE subject_id = ? 
+    AND day = ? 
+    AND schedule_status = 'Approved'
   `;
 
-  console.log('Checking for existing record with query:', checkQuery);
-  console.log('Query parameters:', [subject_id, subject_id, student_id]);
-
-  db.query(checkQuery, [subject_id, subject_id, student_id], (err, results) => {
+  db.query(scheduleQuery, [subject_id, currentDay], (err, scheduleResults) => {
     if (err) {
-      console.error('Database error during check:', err);
+      console.error('Database error checking schedule:', err);
       return res.status(500).json({ 
         success: false,
-        error: 'Failed to check attendance record',
+        error: 'Failed to check schedule',
         details: err.message 
       });
     }
 
-    console.log('Check query results:', results);
-
-    if (results.length > 0) {
-      // Update existing record
-      const updateQuery = `
-        UPDATE attendance 
-        SET status = ?, 
-            remarks = CURRENT_TIMESTAMP 
-        WHERE attendance_id = ?
-      `;
-
-      console.log('Updating existing record with query:', updateQuery);
-      console.log('Update parameters:', [dbStatus, results[0].attendance_id]);
-
-      db.query(updateQuery, [dbStatus, results[0].attendance_id], (err, updateResult) => {
-        if (err) {
-          console.error('Database error during update:', err);
-          return res.status(500).json({ 
-            success: false,
-            error: 'Failed to update attendance',
-            details: err.message 
-          });
-        }
-
-        console.log('Update successful:', updateResult);
-        res.json({
-          success: true,
-          data: {
-            attendance_id: results[0].attendance_id,
-            subject_id,
-            status: dbStatus,
-            student_id,
-            student_name
-          }
-        });
-      });
-    } else {
-      // Insert new record
-      const insertQuery = `
-        INSERT INTO attendance (subject_id, schedule_id, date, status, student_id, student_name, remarks) 
-        VALUES (?, ?, NOW(), ?, ?, ?, CURRENT_TIMESTAMP)
-      `;
-
-      // Use subject_id for both subject_id and schedule_id to ensure compatibility
-      console.log('Inserting new record with query:', insertQuery);
-      console.log('Insert parameters:', [subject_id, subject_id, dbStatus, student_id, student_name]);
-
-      db.query(insertQuery, [subject_id, subject_id, dbStatus, student_id, student_name], (err, insertResult) => {
-        if (err) {
-          console.error('Database error during insert:', err);
-          console.error('Error details:', err.message);
-          return res.status(500).json({ 
-            success: false,
-            error: 'Failed to record attendance',
-            details: err.message 
-          });
-        }
-
-        console.log('Insert successful:', insertResult);
-        res.json({
-          success: true,
-          data: {
-            attendance_id: insertResult.insertId,
-            subject_id,
-            status: dbStatus,
-            student_id,
-            student_name
-          }
-        });
+    if (scheduleResults.length === 0) {
+      console.log('No schedule found for today:', currentDay);
+      return res.status(400).json({
+        success: false,
+        error: `No schedule for this subject on ${currentDay}`
       });
     }
+
+    console.log('Schedule found for today:', scheduleResults[0]);
+    const schedule_id = scheduleResults[0].schedule_id;
+
+    // Map the status to single character values
+    const statusMap = {
+      'present': 'P',
+      'absent': 'A',
+      'late': 'L'
+    };
+
+    const dbStatus = statusMap[status];
+    console.log('Mapped status:', { original: status, mapped: dbStatus });
+    
+    if (!dbStatus) {
+      console.log('Invalid status value:', status);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status. Must be present, absent, or late'
+      });
+    }
+
+    // Check if an attendance record exists for today
+    const checkQuery = `
+      SELECT attendance_id 
+      FROM attendance 
+      WHERE schedule_id = ?
+      AND student_id = ? 
+      AND DATE(date) = CURDATE()
+    `;
+
+    console.log('Checking for existing record with query:', checkQuery);
+    console.log('Query parameters:', [schedule_id, student_id]);
+
+    db.query(checkQuery, [schedule_id, student_id], (err, results) => {
+      if (err) {
+        console.error('Database error during check:', err);
+        return res.status(500).json({ 
+          success: false,
+          error: 'Failed to check attendance record',
+          details: err.message 
+        });
+      }
+
+      console.log('Check query results:', results);
+
+      if (results.length > 0) {
+        // Update existing record
+        const updateQuery = `
+          UPDATE attendance 
+          SET status = ?, 
+              remarks = CURRENT_TIMESTAMP 
+          WHERE attendance_id = ?
+        `;
+
+        console.log('Updating existing record with query:', updateQuery);
+        console.log('Update parameters:', [dbStatus, results[0].attendance_id]);
+
+        db.query(updateQuery, [dbStatus, results[0].attendance_id], (err, updateResult) => {
+          if (err) {
+            console.error('Database error during update:', err);
+            return res.status(500).json({ 
+              success: false,
+              error: 'Failed to update attendance',
+              details: err.message 
+            });
+          }
+
+          console.log('Update successful:', updateResult);
+          res.json({
+            success: true,
+            data: {
+              attendance_id: results[0].attendance_id,
+              subject_id,
+              schedule_id,
+              status: dbStatus,
+              student_id,
+              student_name
+            }
+          });
+        });
+      } else {
+        // Insert new record
+        const insertQuery = `
+          INSERT INTO attendance (subject_id, schedule_id, date, status, student_id, student_name, remarks) 
+          VALUES (?, ?, NOW(), ?, ?, ?, CURRENT_TIMESTAMP)
+        `;
+
+        console.log('Inserting new record with query:', insertQuery);
+        console.log('Insert parameters:', [subject_id, schedule_id, dbStatus, student_id, student_name]);
+
+        db.query(insertQuery, [subject_id, schedule_id, dbStatus, student_id, student_name], (err, insertResult) => {
+          if (err) {
+            console.error('Database error during insert:', err);
+            console.error('Error details:', err.message);
+            return res.status(500).json({ 
+              success: false,
+              error: 'Failed to record attendance',
+              details: err.message 
+            });
+          }
+
+          console.log('Insert successful:', insertResult);
+          res.json({
+            success: true,
+            data: {
+              attendance_id: insertResult.insertId,
+              subject_id,
+              schedule_id,
+              status: dbStatus,
+              student_id,
+              student_name
+            }
+          });
+        });
+      }
+    });
   });
 });
 
