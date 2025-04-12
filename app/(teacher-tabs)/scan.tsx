@@ -1,11 +1,12 @@
 import React, { useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard, SafeAreaView, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard, SafeAreaView, Modal, Vibration } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { Camera } from 'expo-camera';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
+import * as Haptics from 'expo-haptics';
 
 type SchoolYear = {
   school_year: string;
@@ -34,9 +35,9 @@ type StudentDatabase = {
 
 // Mock student data
 const MOCK_STUDENTS: StudentDatabase = {
-  '2024-0001': { name: 'John Doe', grade: '7', section: 'Diamond' },
-  '2024-0002': { name: 'Jane Smith', grade: '8', section: 'Pearl' },
-  '2024-0003': { name: 'Bob Johnson', grade: '9', section: 'Ruby' },
+  '20240001': { name: 'John Doe', grade: '7', section: 'Diamond' },
+  '20240002': { name: 'Jane Smith', grade: '8', section: 'Pearl' },
+  '20240003': { name: 'Bob Johnson', grade: '9', section: 'Ruby' },
   // Add more mock students as needed
 };
 
@@ -80,6 +81,8 @@ const ScanScreen: React.FC = () => {
   const [showRemarksModal, setShowRemarksModal] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [attendanceStatus, setAttendanceStatus] = useState<'present' | 'absent' | null>(null);
+  const [lastScanned, setLastScanned] = useState<string | null>(null);
+  const [showScannedOverlay, setShowScannedOverlay] = useState(false);
 
   // Get current date in a readable format
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -221,10 +224,29 @@ const ScanScreen: React.FC = () => {
     fetchSchoolYears();
   }, []);
 
-  const handleBarCodeScanned = ({ data }: { data: string }) => {
+  const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
+    // Prevent multiple scans of the same code in quick succession
+    if (lastScanned === data) return;
+    
+    setLastScanned(data);
+    
+    // Provide haptic feedback
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      // Fallback to basic vibration if haptics not available
+      Vibration.vibrate(100);
+    }
+
+    // Show visual feedback
+    setShowScannedOverlay(true);
+    setTimeout(() => setShowScannedOverlay(false), 1000);
+
+    // Process the scanned data
     setShowCamera(false);
     setStudentId(data);
-    // Automatically submit after scanning
+    
+    // Find student in database
     const foundStudent = MOCK_STUDENTS[data];
     if (foundStudent) {
       setScannedStudent({
@@ -281,6 +303,12 @@ const ScanScreen: React.FC = () => {
               <View style={styles.scanFrame} />
               <Text style={styles.scanText}>Position barcode within frame</Text>
             </View>
+            {showScannedOverlay && (
+              <View style={styles.scannedOverlay}>
+                <MaterialIcons name="check-circle" size={60} color="#28a745" />
+                <Text style={styles.scannedText}>Barcode Detected!</Text>
+              </View>
+            )}
           </SafeAreaView>
         </View>
       ) : (
@@ -909,5 +937,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#28a745',
     textAlign: 'center',
+  },
+  scannedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannedText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 16,
   },
 }); 

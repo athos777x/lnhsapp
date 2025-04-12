@@ -4,25 +4,65 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
-// Function to generate simple barcode data
+// Code128 character set B encoding (includes numbers and uppercase letters)
+const CODE128_SET_B = {
+  START: [true, true, false, true, true, false, false, true, true, false, false], // Start character for Code128B
+  STOP: [true, true, false, true, true, false, false, true, true, true, false, true, true], // Stop character
+  QUIET: [false, false, false, false], // Quiet zone
+};
+
+// Function to calculate Code128 checksum
+const calculateChecksum = (value: string) => {
+  let sum = 104; // Start B value
+  for (let i = 0; i < value.length; i++) {
+    sum += (value.charCodeAt(i) - 32) * (i + 1);
+  }
+  return sum % 103;
+};
+
+// Function to encode a single character in Code128B
+const encodeChar = (char: string): boolean[] => {
+  // Code128B encoding patterns for ASCII values 32-127
+  const patterns: { [key: string]: boolean[] } = {
+    '0': [true,true,false,false,true,true,false,false,true,true,false],
+    '1': [true,true,false,false,true,true,false,true,true,false,false],
+    '2': [true,true,false,true,true,false,false,true,true,false,false],
+    '3': [true,false,false,true,false,false,true,true,false,false,false],
+    '4': [true,false,false,true,false,true,true,false,false,false,false],
+    '5': [true,false,true,true,false,false,true,false,false,false,false],
+    '6': [true,false,false,true,true,false,true,false,false,false,false],
+    '7': [true,false,false,true,true,false,false,true,false,false,false],
+    '8': [true,true,false,false,true,false,true,false,false,false,false],
+    '9': [true,true,false,true,true,false,true,false,false,false,false],
+  };
+  return patterns[char] || patterns['0']; // Default to '0' pattern if character not found
+};
+
+// Function to generate Code128B barcode data
 const generateBarcodeData = (value: string) => {
   const result: boolean[] = [];
-  // Start with quiet zone
-  result.push(false, false);
   
-  // Convert each character to binary pattern
+  // Add quiet zone
+  result.push(...CODE128_SET_B.QUIET);
+  
+  // Add start character
+  result.push(...CODE128_SET_B.START);
+  
+  // Encode each character
   for (const char of value) {
-    const code = char.charCodeAt(0);
-    const binary = code.toString(2).padStart(8, '0');
-    for (const bit of binary) {
-      result.push(bit === '1');
-      // Add separator between bits
-      result.push(false);
-    }
+    result.push(...encodeChar(char));
   }
   
-  // End with quiet zone
-  result.push(false, false);
+  // Add checksum
+  const checksum = calculateChecksum(value);
+  result.push(...encodeChar(checksum.toString()));
+  
+  // Add stop character
+  result.push(...CODE128_SET_B.STOP);
+  
+  // Add quiet zone
+  result.push(...CODE128_SET_B.QUIET);
+  
   return result;
 };
 
@@ -146,7 +186,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   barcodeBar: {
-    width: 2,
+    width: 1, // Made thinner for better scanning
     height: '100%',
   },
   divider: {
