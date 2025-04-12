@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 
 type Section = {
   section_id: number;
@@ -57,8 +58,13 @@ export default function TeacherAttendance() {
   const { userData } = useAuth();
   const router = useRouter();
 
-  // Add new state for tracking the current date
-  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+  // Add new state for tracking the current date in readable format
+  const [currentDate] = useState(new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }));
 
   // Add status message handler
   const showStatusMessage = (message: string, color: string) => {
@@ -421,8 +427,7 @@ export default function TeacherAttendance() {
       <TouchableOpacity
         style={[
           styles.card,
-          selectedSubject?.subject_id === item.subject_id && styles.selectedCard,
-          !hasScheduleToday && styles.noScheduleCard
+          selectedSubject?.subject_id === item.subject_id && styles.selectedCard
         ]}
         onPress={() => handleSubjectPress(item)}
       >
@@ -430,11 +435,10 @@ export default function TeacherAttendance() {
           <View>
             <Text style={styles.cardTitle}>{item.subject_name}</Text>
             <View style={styles.gradeBadge}>
+              <Text style={styles.gradeBadgeText}>{item.day}</Text>
               <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
-              {hasScheduleToday ? (
-                <Text style={styles.gradeBadgeText}>{item.day}</Text>
-              ) : (
-                <Text style={styles.noScheduleText}>No schedule today</Text>
+              {!hasScheduleToday && (
+                <Text style={styles.noScheduleText}>No schedule for today</Text>
               )}
             </View>
           </View>
@@ -456,7 +460,7 @@ export default function TeacherAttendance() {
           <View style={styles.studentInfo}>
             <Text style={styles.studentName}>{item.stud_name}</Text>
             <Text style={styles.studentId}>
-              {item.lrn || `ID: ${item.student_id}`}
+              ID: {item.student_id}
             </Text>
           </View>
           <View style={styles.attendanceButtons}>
@@ -563,18 +567,24 @@ export default function TeacherAttendance() {
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Select Section</Text>
           </View>
-          <View style={styles.schoolYearContainer}>
-            <TouchableOpacity
-              style={styles.schoolYearBadge}
-              onPress={() => setShowYearPicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={20} color="#28a745" />
+          
+          {/* Date Display */}
+          <Text style={styles.dateText}>{currentDate}</Text>
+
+          {/* School Year Selector */}
+          <TouchableOpacity
+            style={styles.schoolYearSelector}
+            onPress={() => setShowYearPicker(true)}
+          >
+            <View style={styles.schoolYearContent}>
+              <MaterialIcons name="calendar-today" size={20} color="#28a745" />
               <Text style={styles.schoolYearText}>
-                School Year {currentSchoolYear?.school_year || 'Loading...'}
+                {currentSchoolYear?.school_year || 'Select School Year'}
               </Text>
-              <Ionicons name="chevron-down" size={20} color="#28a745" />
-            </TouchableOpacity>
-          </View>
+              <MaterialIcons name="arrow-drop-down" size={24} color="#28a745" />
+            </View>
+          </TouchableOpacity>
+
           <FlatList
             data={sections}
             renderItem={renderSection}
@@ -593,6 +603,10 @@ export default function TeacherAttendance() {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Select Subject</Text>
           </View>
+
+          {/* Date Display */}
+          <Text style={styles.dateText}>{currentDate}</Text>
+
           <FlatList
             data={subjects}
             renderItem={renderSubject}
@@ -611,6 +625,10 @@ export default function TeacherAttendance() {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Mark Attendance</Text>
           </View>
+
+          {/* Date Display */}
+          <Text style={styles.dateText}>{currentDate}</Text>
+
           <FlatList
             data={students}
             renderItem={renderStudent}
@@ -694,6 +712,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
     marginTop: 8,
+    gap: 4,
   },
   gradeBadgeText: {
     color: '#28a745',
@@ -769,24 +788,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  schoolYearContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  schoolYearSelector: {
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  schoolYearBadge: {
+  schoolYearContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e8f5e9',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: 'center',
-    gap: 8,
+    padding: 12,
+    gap: 12,
   },
   schoolYearText: {
+    flex: 1,
     fontSize: 16,
     color: '#28a745',
     fontWeight: '600',
@@ -876,15 +896,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  noScheduleCard: {
-    backgroundColor: '#f8f9fa',
-    borderColor: '#dee2e6',
-    borderStyle: 'dashed',
-  },
   noScheduleText: {
     color: '#dc3545',
     fontSize: 12,
     fontWeight: '500',
-    marginTop: 4,
+    marginTop: 2,
+  },
+  dateText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginVertical: 12,
+    paddingHorizontal: 16,
   },
 });

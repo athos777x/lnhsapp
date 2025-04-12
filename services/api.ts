@@ -169,6 +169,19 @@ interface StudentDailyAttendanceResponse {
   error?: string;
 }
 
+interface StudentSearchResult {
+  student_id: string;
+  name: string;
+  grade: string;
+  section: string;
+}
+
+interface StudentSearchResponse {
+  success: boolean;
+  data?: StudentSearchResult;
+  error?: string;
+}
+
 export const api = {
   // Fetch all users
   async getUsers() {
@@ -380,6 +393,19 @@ export const api = {
       return response.data.data;
     } catch (error) {
       console.error('Get student daily attendance error:', error);
+      throw error;
+    }
+  },
+
+  // Search student by ID
+  async searchStudentById(studentId: string): Promise<StudentSearchResult | null> {
+    try {
+      const response = await axios.get<StudentSearchResponse>(
+        `${BASE_URL}/api/student/search/${studentId}`
+      );
+      return response.data.data || null;
+    } catch (error) {
+      console.error('Search student error:', error);
       throw error;
     }
   }

@@ -195,6 +195,64 @@ app.get('/api/school-years', (req, res) => {
   });
 });
 
+// Search student by ID
+app.get('/api/student/search/:studentId', (req, res) => {
+  const studentId = req.params.studentId;
+  console.log('Searching for student with ID:', studentId);
+
+  // First, let's check if the student exists
+  const query = `
+    SELECT 
+      student_id,
+      CONCAT(lastname, ', ', firstname, ' ', IFNULL(middlename, '')) as name,
+      current_yr_lvl as grade,
+      section
+    FROM student 
+    WHERE student_id = ?
+  `;
+  
+  // Convert studentId to number since it comes as string from params
+  const numericStudentId = parseInt(studentId, 10);
+  
+  console.log('Executing query:', query);
+  console.log('Query parameters:', [numericStudentId]);
+  
+  db.query(query, [numericStudentId], (err, results) => {
+    if (err) {
+      console.error('Database error when searching student:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to search student',
+        details: err.message
+      });
+    }
+
+    console.log('Query results:', results);
+
+    if (results.length === 0) {
+      console.log('No student found with ID:', studentId);
+      return res.json({
+        success: true,
+        data: null
+      });
+    }
+
+    const student = results[0];
+    const response = {
+      success: true,
+      data: {
+        student_id: student.student_id,
+        name: student.name.trim(),
+        grade: student.grade,
+        section: student.section
+      }
+    };
+
+    console.log('Sending response:', response);
+    res.json(response);
+  });
+});
+
 // Get teacher's sections and subjects
 app.get('/api/teacher/sections/:employeeId/:schoolYearId', (req, res) => {
   const employeeId = req.params.employeeId;

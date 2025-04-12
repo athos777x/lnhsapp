@@ -249,8 +249,11 @@ export default function AttendanceScreen() {
       )}
 
       {/* Date Selector */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Daily Attendance</Text>
+      </View>
+
       <View style={styles.datePickerCard}>
-        <Text style={styles.datePickerTitle}>Daily Attendance</Text>
         <View style={styles.dateSelector}>
           <TouchableOpacity 
             style={styles.dateArrowButton}
@@ -334,28 +337,6 @@ export default function AttendanceScreen() {
           )}
         </View>
       </View>
-
-      {/* Subject-wise Overall Attendance */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Subject Overall Attendance</Text>
-        {/* ... */}
-      </View>
-
-      {/* Overall Attendance Summary */}
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Overall Attendance</Text>
-        <View style={styles.summaryContent}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>85.5%</Text>
-            <Text style={styles.summaryLabel}>Present</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>14.5%</Text>
-            <Text style={styles.summaryLabel}>Absent</Text>
-          </View>
-        </View>
-      </View>
     </ScrollView>
   );
 }
@@ -387,6 +368,21 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '500',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+    textAlign: 'center',
+  },
   datePickerCard: {
     backgroundColor: '#fff',
     margin: 16,
@@ -397,13 +393,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  datePickerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-    textAlign: 'center',
+    flex: 1,
+    minHeight: 500,
   },
   dateSelector: {
     flexDirection: 'row',
@@ -429,6 +420,7 @@ const styles = StyleSheet.create({
   },
   dailyAttendanceContainer: {
     marginTop: 16,
+    flex: 1,
   },
   dailyAttendanceItem: {
     flexDirection: 'row',
@@ -460,89 +452,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
-  },
-  summaryCard: {
-    backgroundColor: '#fff',
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  summaryContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  summaryItem: {
-    alignItems: 'center',
-  },
-  summaryValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#28a745',
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  divider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#ddd',
-  },
-  section: {
-    marginBottom: 16,
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-  },
-  subjectCard: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  subjectHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  percentageText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#28a745',
-  },
-  attendanceBar: {
-    height: 8,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  attendanceProgress: {
-    height: '100%',
-    backgroundColor: '#28a745',
-    borderRadius: 4,
-  },
-  attendanceText: {
-    fontSize: 12,
-    color: '#666',
   },
   modalOverlay: {
     flex: 1,

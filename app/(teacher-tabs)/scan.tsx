@@ -29,34 +29,6 @@ type TeacherSubjects = {
   [gradeSection: string]: Subject[];
 };
 
-type StudentDatabase = {
-  [key: string]: StudentInfo;
-};
-
-// Mock student data
-const MOCK_STUDENTS: StudentDatabase = {
-  '20240001': { name: 'John Doe', grade: '7', section: 'Diamond' },
-  '20240002': { name: 'Jane Smith', grade: '8', section: 'Pearl' },
-  '20240003': { name: 'Bob Johnson', grade: '9', section: 'Ruby' },
-  // Add more mock students as needed
-};
-
-// Mock teacher's subjects data
-const TEACHER_SUBJECTS: TeacherSubjects = {
-  '7-Diamond': [
-    { id: '1', name: 'Mathematics', code: 'MATH7' },
-    { id: '2', name: 'Science', code: 'SCI7' }
-  ],
-  '8-Pearl': [
-    { id: '3', name: 'Mathematics', code: 'MATH8' }
-  ],
-  '9-Ruby': [
-    { id: '4', name: 'Science', code: 'SCI9' }
-  ]
-};
-
-type AttendanceType = 'brigada';
-
 // Update the BrigadaStatus type
 type BrigadaStatus = {
   status: 'Yes' | 'No';
@@ -72,7 +44,7 @@ const ScanScreen: React.FC = () => {
     section: string;
     brigadaStatus?: BrigadaStatus;
   } | null>(null);
-  const [attendanceType] = useState<AttendanceType>('brigada');
+  const [attendanceType] = useState<'brigada'>('brigada');
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
@@ -83,6 +55,7 @@ const ScanScreen: React.FC = () => {
   const [attendanceStatus, setAttendanceStatus] = useState<'present' | 'absent' | null>(null);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [showScannedOverlay, setShowScannedOverlay] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Get current date in a readable format
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -92,32 +65,35 @@ const ScanScreen: React.FC = () => {
     day: 'numeric'
   });
 
-  const getTeacherSubjectsForStudent = (grade: string, section: string): Subject[] => {
-    const key = `${grade}-${section}`;
-    return TEACHER_SUBJECTS[key] || [];
-  };
-
-  // Update the handleSubmit function to match web app data structure
-  const handleSubmit = () => {
+  // Update the handleSubmit function to use the API
+  const handleSubmit = async () => {
     if (studentId.trim()) {
+      setIsLoading(true);
       Keyboard.dismiss();
-      const foundStudent = MOCK_STUDENTS[studentId];
-      if (foundStudent) {
-        // In real app, this would be fetched from your API
-        const mockBrigadaStatus: BrigadaStatus = {
-          status: 'No',
-          remarks: ''
-        };
-
-        setScannedStudent({
-          id: studentId,
-          ...foundStudent,
-          brigadaStatus: mockBrigadaStatus
-        });
-        setStudentId('');
-      } else {
-        Alert.alert('Error', 'Student ID not found');
-        setStudentId('');
+      try {
+        const student = await api.searchStudentById(studentId);
+        if (student) {
+          setScannedStudent({
+            id: student.student_id,
+            name: student.name,
+            grade: student.grade,
+            section: student.section,
+            brigadaStatus: {
+              status: 'No',
+              remarks: ''
+            }
+          });
+          setStudentId('');
+        } else {
+          Alert.alert('Not Found', `No student found with ID: ${studentId}`);
+          setStudentId('');
+        }
+      } catch (error: any) {
+        console.error('Error searching student:', error);
+        const errorMessage = error.response?.data?.error || error.message || 'Failed to search student';
+        Alert.alert('Error', errorMessage);
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -224,11 +200,13 @@ const ScanScreen: React.FC = () => {
     fetchSchoolYears();
   }, []);
 
+  // Update the handleBarCodeScanned function to use the API
   const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
     // Prevent multiple scans of the same code in quick succession
     if (lastScanned === data) return;
     
     setLastScanned(data);
+    setIsLoading(true);
     
     // Provide haptic feedback
     try {
@@ -246,17 +224,30 @@ const ScanScreen: React.FC = () => {
     setShowCamera(false);
     setStudentId(data);
     
-    // Find student in database
-    const foundStudent = MOCK_STUDENTS[data];
-    if (foundStudent) {
-      setScannedStudent({
-        id: data,
-        ...foundStudent
-      });
-      setStudentId('');
-    } else {
-      Alert.alert('Error', 'Student ID not found');
-      setStudentId('');
+    try {
+      const student = await api.searchStudentById(data);
+      if (student) {
+        setScannedStudent({
+          id: student.student_id,
+          name: student.name,
+          grade: student.grade,
+          section: student.section,
+          brigadaStatus: {
+            status: 'No',
+            remarks: ''
+          }
+        });
+        setStudentId('');
+      } else {
+        Alert.alert('Not Found', `No student found with ID: ${data}`);
+        setStudentId('');
+      }
+    } catch (error: any) {
+      console.error('Error searching student:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to search student';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -313,9 +304,8 @@ const ScanScreen: React.FC = () => {
         </View>
       ) : (
         <View style={styles.content}>
-          {/* Page Title */}
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Brigada Eskwela</Text>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Brigada Eskwela</Text>
           </View>
 
           {/* Date Display */}
@@ -544,7 +534,24 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    paddingHorizontal: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+    marginBottom: 16,
+    marginHorizontal: -16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+    textAlign: 'center',
   },
   schoolYearSelector: {
     backgroundColor: '#fff',
@@ -928,15 +935,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  titleContainer: {
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#28a745',
-    textAlign: 'center',
   },
   scannedOverlay: {
     position: 'absolute',

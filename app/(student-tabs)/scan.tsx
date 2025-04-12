@@ -120,7 +120,9 @@ export default function ScanScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Student ID</Text>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Student ID and Barcode</Text>
+        </View>
         <View style={styles.idCard}>
           <MaterialIcons name="person" size={40} color="#28a745" />
           <Text style={styles.idNumber}>{studentId}</Text>
@@ -129,7 +131,7 @@ export default function ScanScreen() {
           </View>
         </View>
         <View style={styles.divider} />
-        <Text style={styles.instruction}>Show this ID to your teacher</Text>
+        <Text style={styles.instruction}>Show this ID/barcode to your teacher</Text>
       </View>
     </View>
   );
@@ -145,15 +147,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   content: {
-    padding: 20,
-    alignItems: 'center',
-    marginTop: 20,
+    flex: 1,
+    paddingHorizontal: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#28a745',
-    marginBottom: 20,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+    marginBottom: 16,
+    marginHorizontal: -20,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+    textAlign: 'center',
   },
   idCard: {
     backgroundColor: '#fff',
