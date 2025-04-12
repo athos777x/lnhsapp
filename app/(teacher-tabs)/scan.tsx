@@ -290,6 +290,9 @@ const ScanScreen: React.FC = () => {
             <Text style={styles.title}>Brigada Eskwela</Text>
           </View>
 
+          {/* Date Display */}
+          <Text style={styles.dateText}>{currentDate}</Text>
+
           {/* School Year Selector */}
           <TouchableOpacity
             style={styles.schoolYearSelector}
@@ -303,9 +306,6 @@ const ScanScreen: React.FC = () => {
               <MaterialIcons name="arrow-drop-down" size={24} color="#28a745" />
             </View>
           </TouchableOpacity>
-
-          {/* Date Display */}
-          <Text style={styles.dateText}>{currentDate}</Text>
 
           {/* Search Section */}
           <View style={styles.searchSection}>
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   schoolYearSelector: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -541,10 +541,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   dateText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   searchSection: {
     marginBottom: 20,
@@ -902,7 +902,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   titleContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   title: {
     fontSize: 24,
