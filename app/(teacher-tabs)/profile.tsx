@@ -24,6 +24,7 @@ type TeacherProfile = {
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
+  const [username, setUsername] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { userData } = useAuth();
@@ -38,7 +39,11 @@ export default function ProfileScreen() {
           throw new Error('User not logged in');
         }
 
-        // First get the employee ID
+        // Get the username
+        const userDetails = await api.getUserDetails(userData.userId);
+        setUsername(userDetails.username);
+
+        // Get the employee ID
         const employeeId = await api.getEmployeeId(userData.userId);
         
         // Then get the employee details
@@ -98,17 +103,16 @@ export default function ProfileScreen() {
             <MaterialIcons name="person" size={32} color="#28a745" />
           </View>
           <Text style={styles.name}>{profile.emp_name}</Text>
-          <Text style={styles.email}>{profile.email || 'N/A'}</Text>
+          <Text style={styles.email}>{username}</Text>
           <View style={styles.departmentBadge}>
-            <MaterialIcons name="business" size={16} color="#28a745" style={styles.departmentIcon} />
-            <Text style={styles.departmentText}>{profile.department || 'Department not assigned'}</Text>
+            <Text style={styles.departmentText}>{profile.department || 'Subject Teacher'}</Text>
           </View>
         </View>
       </View>
 
-      {/* Teacher Details Section */}
+      {/* Teacher Information Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Teacher Details</Text>
+        <Text style={styles.sectionTitle}>Teacher Information</Text>
         <View style={styles.infoList}>
           <View style={styles.infoRow}>
             <MaterialIcons name="badge" size={20} color="#28a745" />
@@ -117,34 +121,6 @@ export default function ProfileScreen() {
               <Text style={styles.infoValue}>{profile.employee_id}</Text>
             </View>
           </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="school" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Department</Text>
-              <Text style={styles.infoValue}>{profile.department || 'N/A'}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="stars" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Specialization</Text>
-              <Text style={styles.infoValue}>{profile.specialization || 'N/A'}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="timeline" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Years of Service</Text>
-              <Text style={styles.infoValue}>{profile.yearsOfService ? `${profile.yearsOfService} years` : 'N/A'}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Personal Information Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Personal Information</Text>
-        <View style={styles.infoList}>
           <View style={styles.infoRow}>
             <MaterialIcons name="cake" size={20} color="#28a745" />
             <View style={styles.infoContent}>

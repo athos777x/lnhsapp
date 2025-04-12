@@ -20,6 +20,7 @@ type StudentProfile = {
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [username, setUsername] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { userData } = useAuth();
@@ -34,7 +35,11 @@ export default function ProfileScreen() {
           throw new Error('User not logged in');
         }
 
-        // First get the student ID
+        // Get the username
+        const userDetails = await api.getUserDetails(userData.userId);
+        setUsername(userDetails.username);
+
+        // Get the student ID
         const studentId = await api.getStudentId(userData.userId);
         
         // Then get the student profile details
@@ -84,9 +89,8 @@ export default function ProfileScreen() {
             <MaterialIcons name="person" size={32} color="#28a745" />
           </View>
           <Text style={styles.name}>{profile.stud_name}</Text>
-          <Text style={styles.email}>{profile.email_address || 'N/A'}</Text>
+          <Text style={styles.email}>{username}</Text>
           <View style={styles.departmentBadge}>
-            <MaterialIcons name="school" size={16} color="#28a745" style={styles.departmentIcon} />
             <Text style={styles.departmentText}>Student</Text>
           </View>
         </View>
@@ -243,9 +247,6 @@ const styles = StyleSheet.create({
     color: '#28a745',
     fontSize: 14,
     fontWeight: '500',
-  },
-  departmentIcon: {
-    marginRight: 2,
   },
   section: {
     marginTop: 24,
