@@ -1,73 +1,95 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 type TeacherProfile = {
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  email: string;
-  department: string;
-  employeeId: string;
-  birthday: string;
-  gender: string;
-  age: number;
-  homeAddress: string;
-  barangay: string;
-  cityMunicipality: string;
-  province: string;
-  contactNumber: string;
-  specialization: string;
-  yearsOfService: number;
+  employee_id: number;
+  emp_name: string;
+  address: string;
+  contact_number: string;
+  email?: string;
+  department?: string;
+  birthday?: string;
+  gender?: string;
+  age?: number;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  specialization?: string;
+  yearsOfService?: number;
 };
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
+  const [username, setUsername] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { userData } = useAuth();
 
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const userDetails = await api.getUserDetails(1);
-        // Transform API data to match our profile structure
-        setProfile({
-          firstName: "John",
-          middleName: "M",
-          lastName: "Smith",
-          email: "john_smith@lnhs.edu",
-          department: "Science Department",
-          employeeId: "TCH-2024-001",
-          birthday: "March 15, 1985",
-          gender: "Male",
-          age: 38,
-          homeAddress: "456 Oak Street",
-          barangay: "Brgy. 2",
-          cityMunicipality: "City B",
-          province: "Province B",
-          contactNumber: "555-5678",
-          specialization: "Physics and Chemistry",
-          yearsOfService: 12
-        });
+        setIsLoading(true);
+        setError(null);
+
+        if (!userData?.userId) {
+          throw new Error('User not logged in');
+        }
+
+        // Get the username
+        const userDetails = await api.getUserDetails(userData.userId);
+        setUsername(userDetails.username);
+
+        // Get the employee ID
+        const employeeId = await api.getEmployeeId(userData.userId);
+        
+        // Then get the employee details
+        const employeeDetails = await api.getEmployeeDetails(employeeId);
+        setProfile(employeeDetails);
       } catch (error) {
         console.error('Error fetching user profile:', error);
+        setError('Failed to load profile');
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchUserProfile();
-  }, []);
+  }, [userData]);
 
   const handleLogout = () => {
     router.replace('/login');
   };
 
+  const formatAddress = (profile: TeacherProfile) => {
+    const parts = [
+      profile.address,
+      profile.barangay,
+      profile.cityMunicipality,
+      profile.province
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : 'N/A';
+  };
+
   if (isLoading) {
     return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#28a745" />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error || 'Profile not found'}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => router.replace('/login')}>
+          <Text style={styles.retryButtonText}>Return to Login</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -80,94 +102,65 @@ export default function ProfileScreen() {
           <View style={styles.avatar}>
             <MaterialIcons name="person" size={32} color="#28a745" />
           </View>
-          <Text style={styles.name}>{profile?.firstName} {profile?.middleName}. {profile?.lastName}</Text>
-          <Text style={styles.email}>{profile?.email}</Text>
+          <Text style={styles.name}>{profile.emp_name}</Text>
+          <Text style={styles.email}>{username}</Text>
           <View style={styles.departmentBadge}>
-            <MaterialIcons name="business" size={16} color="#28a745" style={styles.departmentIcon} />
-            <Text style={styles.departmentText}>{profile?.department}</Text>
+            <Text style={styles.departmentText}>{profile.department || 'Subject Teacher'}</Text>
           </View>
         </View>
       </View>
 
-      {/* Teacher Details Section */}
+      {/* Teacher Information Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Teacher Details</Text>
+        <Text style={styles.sectionTitle}>Teacher Information</Text>
         <View style={styles.infoList}>
           <View style={styles.infoRow}>
             <MaterialIcons name="badge" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Employee ID</Text>
-              <Text style={styles.infoValue}>{profile?.employeeId}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="school" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Department</Text>
-              <Text style={styles.infoValue}>{profile?.department}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="stars" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Specialization</Text>
-              <Text style={styles.infoValue}>{profile?.specialization}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="timeline" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Years of Service</Text>
-              <Text style={styles.infoValue}>{profile?.yearsOfService} years</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Personal Information Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Personal Information</Text>
-        <View style={styles.infoList}>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="person-outline" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Full Name</Text>
-              <Text style={styles.infoValue}>{profile?.firstName} {profile?.middleName}. {profile?.lastName}</Text>
+              <Text style={styles.infoValue}>{profile.employee_id}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
             <MaterialIcons name="cake" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Birthday</Text>
-              <Text style={styles.infoValue}>{profile?.birthday}</Text>
+              <Text style={styles.infoValue}>{profile.birthday || 'N/A'}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
             <MaterialIcons name="person" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Gender</Text>
-              <Text style={styles.infoValue}>{profile?.gender}</Text>
+              <Text style={styles.infoValue}>{profile.gender || 'N/A'}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
             <MaterialIcons name="email" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Email Address</Text>
-              <Text style={styles.infoValue}>{profile?.email}</Text>
+              <Text style={styles.infoValue}>{profile.email || 'N/A'}</Text>
             </View>
           </View>
+        </View>
+      </View>
+
+      {/* Contact Information Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Contact Information</Text>
+        <View style={styles.infoList}>
           <View style={styles.infoRow}>
             <MaterialIcons name="home" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Address</Text>
-              <Text style={styles.infoValue}>{profile?.homeAddress}, {profile?.barangay}, {profile?.cityMunicipality}, {profile?.province}</Text>
+              <Text style={styles.infoValue}>{formatAddress(profile)}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
             <MaterialIcons name="phone" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Contact Number</Text>
-              <Text style={styles.infoValue}>{profile?.contactNumber}</Text>
+              <Text style={styles.infoValue}>{profile.contact_number || 'N/A'}</Text>
             </View>
           </View>
         </View>
@@ -236,13 +229,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  departmentIcon: {
-    marginRight: 2,
-  },
   departmentText: {
     color: '#28a745',
     fontSize: 14,
     fontWeight: '500',
+  },
+  departmentIcon: {
+    marginRight: 2,
   },
   section: {
     marginTop: 24,
@@ -296,6 +289,41 @@ const styles = StyleSheet.create({
   logoutText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#dc3545',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#28a745',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

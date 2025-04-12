@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 
 type Section = {
   section_id: number;
@@ -24,41 +25,21 @@ type Section = {
 type Subject = {
   subject_id: number;
   subject_name: string;
+  time_range: string;
+  day: string;
 };
 
 type Student = {
-  id: number;
-  name: string;
-  student_id: string;
+  id: string;
+  stud_name: string;
+  student_id: number;
+  lrn?: string;
   attendance_status?: 'present' | 'late' | 'absent';
 };
 
-// Remove MOCK_SECTIONS and keep only MOCK_STUDENTS for now
-const MOCK_STUDENTS: { [key: number]: Student[] } = {
-  1: [
-    { id: 1, name: 'John Doe', student_id: '2024-0001' },
-    { id: 2, name: 'Jane Smith', student_id: '2024-0002' },
-    { id: 3, name: 'Bob Johnson', student_id: '2024-0003' },
-    { id: 4, name: 'Alice Brown', student_id: '2024-0004' },
-  ],
-  2: [
-    { id: 5, name: 'Charlie Wilson', student_id: '2024-0005' },
-    { id: 6, name: 'Diana Clark', student_id: '2024-0006' },
-    { id: 7, name: 'Edward Davis', student_id: '2024-0007' },
-    { id: 8, name: 'Fiona Miller', student_id: '2024-0008' },
-  ],
-  3: [
-    { id: 9, name: 'George White', student_id: '2024-0009' },
-    { id: 10, name: 'Hannah Lee', student_id: '2024-0010' },
-    { id: 11, name: 'Ian Chen', student_id: '2024-0011' },
-    { id: 12, name: 'Julia Wang', student_id: '2024-0012' },
-  ],
-  4: [
-    { id: 13, name: 'Kevin Park', student_id: '2024-0013' },
-    { id: 14, name: 'Linda Kim', student_id: '2024-0014' },
-    { id: 15, name: 'Michael Zhang', student_id: '2024-0015' },
-    { id: 16, name: 'Nancy Liu', student_id: '2024-0016' },
-  ],
+type SchoolYear = {
+  school_year: string;
+  school_year_id: number;
 };
 
 export default function TeacherAttendance() {
@@ -69,13 +50,21 @@ export default function TeacherAttendance() {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ text: string; color: string }>({ text: '', color: '' });
   const [showStatus, setShowStatus] = useState(false);
-  const [currentSchoolYear, setCurrentSchoolYear] = useState('');
+  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<SchoolYear | null>(null);
   const [showYearPicker, setShowYearPicker] = useState(false);
-  const [schoolYears, setSchoolYears] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { userData } = useAuth();
   const router = useRouter();
+
+  // Add new state for tracking the current date in readable format
+  const [currentDate] = useState(new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }));
 
   // Add status message handler
   const showStatusMessage = (message: string, color: string) => {
@@ -87,63 +76,145 @@ export default function TeacherAttendance() {
     }, 2000);
   };
 
-  const handleSectionPress = (section: Section) => {
+  const handleSectionPress = async (section: Section) => {
     setSelectedSection(section);
     setSelectedSubject(null);
     setStudents([]);
     setSubjects(section.subjects);
+    
+    try {
+      console.log('Fetching students for section:', section.section_id);
+      const sectionStudents = await api.getSectionStudents(section.section_id);
+      console.log('Received students:', sectionStudents);
+      
+      // Map the API response to match our Student type
+      const formattedStudents = sectionStudents.map(student => ({
+        id: student.student_id.toString(),
+        stud_name: student.stud_name,
+        student_id: student.student_id,
+        lrn: student.lrn || undefined,
+        attendance_status: undefined
+      }));
+      
+      console.log('Formatted students:', formattedStudents);
+      setStudents(formattedStudents);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      showStatusMessage('Failed to load students', '#dc3545');
+    }
   };
 
-  const handleSubjectPress = (subject: Subject) => {
+  const handleSubjectPress = async (subject: Subject) => {
+    console.log('Selected subject:', subject);
+    console.log('Current students:', students);
     setSelectedSubject(subject);
-    // Load mock students for the selected section
-    setStudents(MOCK_STUDENTS[selectedSection!.section_id].map(student => ({
-      ...student,
-      attendance_status: undefined,
-    })));
+
+    try {
+      // Get the current date in YYYY-MM-DD format
+      const formattedDate = currentDate;
+      console.log('Fetching attendance records for date:', formattedDate);
+      
+      // Fetch existing attendance records for this subject and date
+      const attendanceRecords = await api.getAttendanceRecords(subject.subject_id, formattedDate);
+      console.log('Received attendance records:', attendanceRecords);
+      
+      // Update students with their attendance status
+      const updatedStudents = students.map(student => {
+        const record = attendanceRecords.data.find(r => r.student_id === student.student_id);
+        console.log(`Student ${student.student_id} attendance record:`, record);
+        return {
+          ...student,
+          attendance_status: record ? record.status : undefined
+        };
+      });
+      
+      console.log('Updated students with attendance status:', updatedStudents);
+      setStudents(updatedStudents);
+    } catch (error) {
+      console.error('Error fetching attendance records:', error);
+      showStatusMessage('Failed to load attendance records', '#dc3545');
+    }
   };
 
   const handleAttendanceStatus = async (student: Student, status: 'present' | 'late' | 'absent') => {
     try {
-      // Toggle attendance status
-      setStudents(students.map(s => {
+      if (!selectedSubject) {
+        showStatusMessage('Please select a subject first', '#dc3545');
+        return;
+      }
+
+      // Check if the selected subject's day matches today's day
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const currentDay = days[new Date().getDay()];
+      
+      if (selectedSubject.day !== currentDay) {
+        showStatusMessage(`No schedule for ${selectedSubject.subject_name} on ${currentDay}`, '#dc3545');
+        return;
+      }
+
+      // Toggle attendance status in UI
+      const updatedStudents = students.map(s => {
         if (s.id === student.id) {
           // If the same status is clicked again, remove it
           const newStatus = s.attendance_status === status ? undefined : status;
-          // Show appropriate status message with color
-          if (newStatus === undefined) {
-            showStatusMessage(`Unmarked ${student.name}`, '#6c757d'); // Gray for unmark
-          } else {
-            const statusColors = {
-              present: '#28a745',
-              late: '#ffc107',
-              absent: '#dc3545'
-            };
-            showStatusMessage(`Marked ${student.name} as ${status}`, statusColors[status]);
-          }
           return { ...s, attendance_status: newStatus };
         }
         return s;
-      }));
-    } catch (err) {
-      console.error(err);
-      showStatusMessage('Failed to update attendance', '#dc3545'); // Red for error
+      });
+      setStudents(updatedStudents);
+
+      // If we're removing the status (toggling off), don't make API call
+      if (updatedStudents.find(s => s.id === student.id)?.attendance_status === undefined) {
+        showStatusMessage(`Unmarked ${student.stud_name}`, '#6c757d');
+        return;
+      }
+
+      // Make API call to record attendance
+      const response = await api.recordAttendance({
+        subject_id: selectedSubject.subject_id,
+        status,
+        student_id: student.student_id,
+        student_name: student.stud_name
+      });
+
+      if (response.success) {
+        const statusColors = {
+          present: '#28a745',
+          late: '#ffc107',
+          absent: '#dc3545'
+        };
+        showStatusMessage(`Marked ${student.stud_name} as ${status}`, statusColors[status]);
+      } else {
+        // If API call fails, revert the UI change
+        setStudents(students);
+        showStatusMessage(response.error || 'Failed to update attendance', '#dc3545');
+      }
+    } catch (err: any) {
+      console.error('Error updating attendance:', err);
+      // Revert UI change on error
+      setStudents(students);
+      
+      // Display error message from API if available
+      const errorMessage = err.response?.data?.error || 'Failed to update attendance';
+      showStatusMessage(errorMessage, '#dc3545');
     }
   };
 
-  const handleSchoolYearPress = (year: string) => {
+  const handleSchoolYearPress = (year: SchoolYear) => {
     setCurrentSchoolYear(year);
     setShowYearPicker(false);
-    showStatusMessage(`School Year changed to ${year}`, '#28a745');
+    showStatusMessage(`School Year changed to ${year.school_year}`, '#28a745');
+    // Pass the selected year directly to fetchTeacherData
+    fetchTeacherData(year);
   };
 
   const fetchSchoolYears = async () => {
     try {
-      const schoolYears = await api.getSchoolYears();
-      setSchoolYears(schoolYears);
+      const years = await api.getSchoolYears();
+      setSchoolYears(years);
       // Set the current school year to the first one (which will be the active one)
-      if (schoolYears.length > 0) {
-        setCurrentSchoolYear(schoolYears[0]);
+      if (years.length > 0) {
+        setCurrentSchoolYear(years[0]);
       }
     } catch (error) {
       console.error('Error fetching school years:', error);
@@ -152,13 +223,14 @@ export default function TeacherAttendance() {
   };
 
   // Add this function to fetch teacher sections
-  const fetchTeacherData = async () => {
+  const fetchTeacherData = async (schoolYear = currentSchoolYear) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      if (!userData) {
-        setError('User not logged in');
+      if (!userData || !schoolYear) {
+        console.log('Missing data:', { userData, schoolYear });
+        setError('Please log in again');
         router.replace('/login');
         return;
       }
@@ -170,8 +242,8 @@ export default function TeacherAttendance() {
       const employeeId = await api.getEmployeeId(userId);
       console.log('Employee ID:', employeeId);
       
-      // Get sections
-      const sectionsData = await api.getTeacherSections(employeeId);
+      // Get sections using the school year ID directly
+      const sectionsData = await api.getTeacherSections(employeeId, schoolYear.school_year_id);
       console.log('Raw sections data:', sectionsData);
       
       // Create a map to store unique sections by section_id
@@ -196,7 +268,9 @@ export default function TeacherAttendance() {
         if (!section.subjects.some(s => s.subject_id === item.subject_id)) {
           section.subjects.push({
             subject_id: item.subject_id,
-            subject_name: item.subject_name
+            subject_name: item.subject_name,
+            time_range: item.time_range,
+            day: item.day
           });
         }
       });
@@ -239,9 +313,32 @@ export default function TeacherAttendance() {
   };
 
   useEffect(() => {
-    fetchTeacherData();
-    fetchSchoolYears();
-  }, []);
+    // First fetch school years
+    const initializeData = async () => {
+      try {
+        setIsLoading(true);
+        // First get school years
+        const years = await api.getSchoolYears();
+        setSchoolYears(years);
+        
+        // Set current school year
+        if (years.length > 0) {
+          setCurrentSchoolYear(years[0]);
+          // Only fetch teacher data after we have the school year
+          if (userData) {
+            await fetchTeacherData(years[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing data:', error);
+        setError('Failed to load initial data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeData();
+  }, [userData]); // Add userData as dependency
 
   if (isLoading) {
     return (
@@ -261,7 +358,33 @@ export default function TeacherAttendance() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity 
             style={styles.retryButton}
-            onPress={fetchTeacherData}
+            onPress={() => {
+              // First fetch school years
+              const initializeData = async () => {
+                try {
+                  setIsLoading(true);
+                  // First get school years
+                  const years = await api.getSchoolYears();
+                  setSchoolYears(years);
+                  
+                  // Set current school year
+                  if (years.length > 0) {
+                    setCurrentSchoolYear(years[0]);
+                    // Only fetch teacher data after we have the school year
+                    if (userData) {
+                      await fetchTeacherData(years[0]);
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error initializing data:', error);
+                  setError('Failed to load initial data');
+                } finally {
+                  setIsLoading(false);
+                }
+              };
+
+              initializeData();
+            }}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -294,81 +417,100 @@ export default function TeacherAttendance() {
     </TouchableOpacity>
   );
 
-  const renderSubject = ({ item }: { item: Subject }) => (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        selectedSubject?.subject_id === item.subject_id && styles.selectedCard,
-      ]}
-      onPress={() => handleSubjectPress(item)}
-    >
-      <View style={styles.cardContent}>
-        <View>
-          <Text style={styles.cardTitle}>{item.subject_name}</Text>
+  const renderSubject = ({ item }: { item: Subject }) => {
+    // Check if the subject's day matches today's day
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = days[new Date().getDay()];
+    const hasScheduleToday = item.day === currentDay;
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.card,
+          selectedSubject?.subject_id === item.subject_id && styles.selectedCard
+        ]}
+        onPress={() => handleSubjectPress(item)}
+      >
+        <View style={styles.cardContent}>
+          <View>
+            <Text style={styles.cardTitle}>{item.subject_name}</Text>
+            <View style={styles.gradeBadge}>
+              <Text style={styles.gradeBadgeText}>{item.day}</Text>
+              <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
+              {!hasScheduleToday && (
+                <Text style={styles.noScheduleText}>No schedule for today</Text>
+              )}
+            </View>
+          </View>
+          <Ionicons 
+            name="chevron-forward" 
+            size={20} 
+            color={selectedSubject?.subject_id === item.subject_id ? "#28a745" : "#666"} 
+          />
         </View>
-        <Ionicons 
-          name="chevron-forward" 
-          size={20} 
-          color={selectedSubject?.subject_id === item.subject_id ? "#28a745" : "#666"} 
-        />
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
-  const renderStudent = ({ item }: { item: Student }) => (
-    <View style={styles.studentCard}>
-      <View style={styles.studentCardContent}>
-        <View style={styles.studentInfo}>
-          <Text style={styles.studentName}>{item.name}</Text>
-          <Text style={styles.studentId}>{item.student_id}</Text>
-        </View>
-        <View style={styles.attendanceButtons}>
-          <TouchableOpacity
-            style={[
-              styles.statusButton,
-              { borderColor: '#28a745' },
-              item.attendance_status === 'present' && styles.presentButtonSelected,
-            ]}
-            onPress={() => handleAttendanceStatus(item, 'present')}
-          >
-            <Ionicons 
-              name="checkmark-circle" 
-              size={20} 
-              color={item.attendance_status === 'present' ? '#fff' : '#28a745'} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.statusButton,
-              { borderColor: '#ffc107' },
-              item.attendance_status === 'late' && styles.lateButtonSelected,
-            ]}
-            onPress={() => handleAttendanceStatus(item, 'late')}
-          >
-            <Ionicons 
-              name="time" 
-              size={20} 
-              color={item.attendance_status === 'late' ? '#fff' : '#ffc107'} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.statusButton,
-              { borderColor: '#dc3545' },
-              item.attendance_status === 'absent' && styles.absentButtonSelected,
-            ]}
-            onPress={() => handleAttendanceStatus(item, 'absent')}
-          >
-            <Ionicons 
-              name="close-circle" 
-              size={20} 
-              color={item.attendance_status === 'absent' ? '#fff' : '#dc3545'} 
-            />
-          </TouchableOpacity>
+  const renderStudent = ({ item }: { item: Student }) => {
+    console.log('Rendering student:', item);
+    return (
+      <View style={styles.studentCard} key={item.id}>
+        <View style={styles.studentCardContent}>
+          <View style={styles.studentInfo}>
+            <Text style={styles.studentName}>{item.stud_name}</Text>
+            <Text style={styles.studentId}>
+              ID: {item.student_id}
+            </Text>
+          </View>
+          <View style={styles.attendanceButtons}>
+            <TouchableOpacity
+              style={[
+                styles.statusButton,
+                { borderColor: '#28a745' },
+                item.attendance_status === 'present' && styles.presentButtonSelected,
+              ]}
+              onPress={() => handleAttendanceStatus(item, 'present')}
+            >
+              <Ionicons 
+                name="checkmark-circle" 
+                size={20} 
+                color={item.attendance_status === 'present' ? '#fff' : '#28a745'} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.statusButton,
+                { borderColor: '#ffc107' },
+                item.attendance_status === 'late' && styles.lateButtonSelected,
+              ]}
+              onPress={() => handleAttendanceStatus(item, 'late')}
+            >
+              <Ionicons 
+                name="time" 
+                size={20} 
+                color={item.attendance_status === 'late' ? '#fff' : '#ffc107'} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.statusButton,
+                { borderColor: '#dc3545' },
+                item.attendance_status === 'absent' && styles.absentButtonSelected,
+              ]}
+              onPress={() => handleAttendanceStatus(item, 'absent')}
+            >
+              <Ionicons 
+                name="close-circle" 
+                size={20} 
+                color={item.attendance_status === 'absent' ? '#fff' : '#dc3545'} 
+              />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -398,20 +540,20 @@ export default function TeacherAttendance() {
             </View>
             {schoolYears.map((year) => (
               <TouchableOpacity
-                key={year}
+                key={year.school_year_id}
                 style={[
                   styles.yearOption,
-                  currentSchoolYear === year && styles.selectedYearOption,
+                  currentSchoolYear?.school_year_id === year.school_year_id && styles.selectedYearOption,
                 ]}
                 onPress={() => handleSchoolYearPress(year)}
               >
                 <Text style={[
                   styles.yearOptionText,
-                  currentSchoolYear === year && styles.selectedYearOptionText,
+                  currentSchoolYear?.school_year_id === year.school_year_id && styles.selectedYearOptionText,
                 ]}>
-                  {year}
+                  {year.school_year}
                 </Text>
-                {currentSchoolYear === year && (
+                {currentSchoolYear?.school_year_id === year.school_year_id && (
                   <Ionicons name="checkmark" size={24} color="#fff" />
                 )}
               </TouchableOpacity>
@@ -425,16 +567,24 @@ export default function TeacherAttendance() {
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Select Section</Text>
           </View>
-          <View style={styles.schoolYearContainer}>
-            <TouchableOpacity
-              style={styles.schoolYearBadge}
-              onPress={() => setShowYearPicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={20} color="#28a745" />
-              <Text style={styles.schoolYearText}>School Year {currentSchoolYear}</Text>
-              <Ionicons name="chevron-down" size={20} color="#28a745" />
-            </TouchableOpacity>
-          </View>
+          
+          {/* Date Display */}
+          <Text style={styles.dateText}>{currentDate}</Text>
+
+          {/* School Year Selector */}
+          <TouchableOpacity
+            style={styles.schoolYearSelector}
+            onPress={() => setShowYearPicker(true)}
+          >
+            <View style={styles.schoolYearContent}>
+              <MaterialIcons name="calendar-today" size={20} color="#28a745" />
+              <Text style={styles.schoolYearText}>
+                {currentSchoolYear?.school_year || 'Select School Year'}
+              </Text>
+              <MaterialIcons name="arrow-drop-down" size={24} color="#28a745" />
+            </View>
+          </TouchableOpacity>
+
           <FlatList
             data={sections}
             renderItem={renderSection}
@@ -453,6 +603,10 @@ export default function TeacherAttendance() {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Select Subject</Text>
           </View>
+
+          {/* Date Display */}
+          <Text style={styles.dateText}>{currentDate}</Text>
+
           <FlatList
             data={subjects}
             renderItem={renderSubject}
@@ -471,11 +625,16 @@ export default function TeacherAttendance() {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Mark Attendance</Text>
           </View>
+
+          {/* Date Display */}
+          <Text style={styles.dateText}>{currentDate}</Text>
+
           <FlatList
             data={students}
             renderItem={renderStudent}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
+            extraData={selectedSubject}
           />
         </>
       )}
@@ -553,6 +712,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
     marginTop: 8,
+    gap: 4,
   },
   gradeBadgeText: {
     color: '#28a745',
@@ -628,24 +788,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  schoolYearContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  schoolYearSelector: {
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  schoolYearBadge: {
+  schoolYearContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e8f5e9',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: 'center',
-    gap: 8,
+    padding: 12,
+    gap: 12,
   },
   schoolYearText: {
+    flex: 1,
     fontSize: 16,
     color: '#28a745',
     fontWeight: '600',
@@ -734,5 +895,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  noScheduleText: {
+    color: '#dc3545',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  dateText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginVertical: 12,
+    paddingHorizontal: 16,
   },
 });

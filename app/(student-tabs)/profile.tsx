@@ -1,62 +1,60 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 type StudentProfile = {
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  email: string;
-  grade: string;
+  student_id: number;
+  stud_name: string;
+  contact_number: string;
   birthday: string;
   gender: string;
   age: number;
-  homeAddress: string;
-  barangay: string;
-  cityMunicipality: string;
-  province: string;
-  contactNumber: string;
-  mothersName: string;
-  fathersName: string;
+  email_address: string;
+  mother_name: string;
+  father_name: string;
+  home_address: string;
 };
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [username, setUsername] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { userData } = useAuth();
 
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const userDetails = await api.getUserDetails(1);
-        // Transform API data to match our profile structure
-        setProfile({
-          firstName: "Elo",
-          middleName: "L",
-          lastName: "Plateros",
-          email: "elo_p@lnhs.com",
-          grade: "Grade 10",
-          birthday: "May 10, 2005",
-          gender: "Male",
-          age: 16,
-          homeAddress: "123 Main St",
-          barangay: "Brgy. 1",
-          cityMunicipality: "City A",
-          province: "Province A",
-          contactNumber: "555-1234",
-          mothersName: "Jane Doe",
-          fathersName: "John Doe"
-        });
+        setIsLoading(true);
+        setError(null);
+
+        if (!userData?.userId) {
+          throw new Error('User not logged in');
+        }
+
+        // Get the username
+        const userDetails = await api.getUserDetails(userData.userId);
+        setUsername(userDetails.username);
+
+        // Get the student ID
+        const studentId = await api.getStudentId(userData.userId);
+        
+        // Then get the student profile details
+        const studentDetails = await api.getStudentProfile(studentId);
+        setProfile(studentDetails);
       } catch (error) {
         console.error('Error fetching user profile:', error);
+        setError('Failed to load profile');
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchUserProfile();
-  }, []);
+  }, [userData]);
 
   const handleLogout = () => {
     router.replace('/login');
@@ -64,8 +62,20 @@ export default function ProfileScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#28a745" />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error || 'Profile not found'}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => router.replace('/login')}>
+          <Text style={styles.retryButtonText}>Return to Login</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -78,11 +88,10 @@ export default function ProfileScreen() {
           <View style={styles.avatar}>
             <MaterialIcons name="person" size={32} color="#28a745" />
           </View>
-          <Text style={styles.name}>{profile?.firstName} {profile?.middleName}. {profile?.lastName}</Text>
-          <Text style={styles.email}>{profile?.email}</Text>
-          <View style={styles.gradeBadge}>
-            <MaterialIcons name="school" size={16} color="#28a745" style={styles.gradeIcon} />
-            <Text style={styles.gradeText}>{profile?.grade}</Text>
+          <Text style={styles.name}>{profile.stud_name}</Text>
+          <Text style={styles.email}>{username}</Text>
+          <View style={styles.departmentBadge}>
+            <Text style={styles.departmentText}>Student</Text>
           </View>
         </View>
       </View>
@@ -92,74 +101,80 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Student Details</Text>
         <View style={styles.infoList}>
           <View style={styles.infoRow}>
-            <MaterialIcons name="cake" size={20} color="#28a745" />
+            <MaterialIcons name="badge" size={20} color="#28a745" />
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Birthday</Text>
-              <Text style={styles.infoValue}>{profile?.birthday}</Text>
+              <Text style={styles.infoLabel}>Student ID</Text>
+              <Text style={styles.infoValue}>{profile.student_id}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
-            <MaterialIcons name="school" size={20} color="#28a745" />
+            <MaterialIcons name="cake" size={20} color="#28a745" />
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Grade Level</Text>
-              <Text style={styles.infoValue}>{profile?.grade}</Text>
+              <Text style={styles.infoLabel}>Birthday</Text>
+              <Text style={styles.infoValue}>{profile.birthday}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
             <MaterialIcons name="person" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Gender</Text>
-              <Text style={styles.infoValue}>{profile?.gender}</Text>
+              <Text style={styles.infoValue}>{profile.gender}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
-            <MaterialIcons name="event" size={20} color="#28a745" />
+            <MaterialIcons name="timer" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Age</Text>
-              <Text style={styles.infoValue}>{profile?.age}</Text>
+              <Text style={styles.infoValue}>{profile.age} years old</Text>
             </View>
           </View>
         </View>
       </View>
 
-      {/* Standard Information Section */}
+      {/* Contact Information Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Personal Information</Text>
+        <Text style={styles.sectionTitle}>Contact Information</Text>
         <View style={styles.infoList}>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="person-outline" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Full Name</Text>
-              <Text style={styles.infoValue}>{profile?.firstName} {profile?.middleName}. {profile?.lastName}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons name="email" size={20} color="#28a745" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Email Address</Text>
-              <Text style={styles.infoValue}>{profile?.email}</Text>
-            </View>
-          </View>
           <View style={styles.infoRow}>
             <MaterialIcons name="home" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Address</Text>
-              <Text style={styles.infoValue}>{profile?.homeAddress}, {profile?.barangay}, {profile?.cityMunicipality}, {profile?.province}</Text>
+              <Text style={styles.infoValue}>{profile.home_address}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
             <MaterialIcons name="phone" size={20} color="#28a745" />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Contact Number</Text>
-              <Text style={styles.infoValue}>{profile?.contactNumber}</Text>
+              <Text style={styles.infoValue}>{profile.contact_number || 'N/A'}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
-            <MaterialIcons name="people" size={20} color="#28a745" />
+            <MaterialIcons name="email" size={20} color="#28a745" />
             <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Parents</Text>
-              <Text style={styles.infoValue}>Mother: {profile?.mothersName}</Text>
-              <Text style={styles.infoValue}>Father: {profile?.fathersName}</Text>
+              <Text style={styles.infoLabel}>Email Address</Text>
+              <Text style={styles.infoValue}>{profile.email_address || 'N/A'}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Parents Information Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Parents Information</Text>
+        <View style={styles.infoList}>
+          <View style={styles.infoRow}>
+            <MaterialIcons name="face" size={20} color="#28a745" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Mother's Name</Text>
+              <Text style={styles.infoValue}>{profile.mother_name || 'N/A'}</Text>
+            </View>
+          </View>
+          <View style={styles.infoRow}>
+            <MaterialIcons name="face" size={20} color="#28a745" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Father's Name</Text>
+              <Text style={styles.infoValue}>{profile.father_name || 'N/A'}</Text>
             </View>
           </View>
         </View>
@@ -219,7 +234,7 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 12,
   },
-  gradeBadge: {
+  departmentBadge: {
     backgroundColor: '#e8f5e9',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -228,10 +243,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  gradeIcon: {
-    marginRight: 2,
-  },
-  gradeText: {
+  departmentText: {
     color: '#28a745',
     fontSize: 14,
     fontWeight: '500',
@@ -288,6 +300,41 @@ const styles = StyleSheet.create({
   logoutText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#dc3545',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#28a745',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });
