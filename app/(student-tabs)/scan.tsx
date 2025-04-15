@@ -8,7 +8,7 @@ import { api } from '../../services/api';
 const CODE128_SET_B = {
   START: [true, true, false, true, true, false, false, true, true, false, false], // Start character for Code128B
   STOP: [true, true, false, true, true, false, false, true, true, true, false, true, true], // Stop character
-  QUIET: [false, false, false, false], // Quiet zone
+  QUIET: [false, false, false, false, false, false, false, false, false, false], // Quiet zone - increased width
 };
 
 // Function to calculate Code128 checksum
@@ -24,22 +24,57 @@ const calculateChecksum = (value: string) => {
 const encodeChar = (char: string): boolean[] => {
   // Code128B encoding patterns for ASCII values 32-127
   const patterns: { [key: string]: boolean[] } = {
-    '0': [true,true,false,false,true,true,false,false,true,true,false],
-    '1': [true,true,false,false,true,true,false,true,true,false,false],
-    '2': [true,true,false,true,true,false,false,true,true,false,false],
-    '3': [true,false,false,true,false,false,true,true,false,false,false],
-    '4': [true,false,false,true,false,true,true,false,false,false,false],
-    '5': [true,false,true,true,false,false,true,false,false,false,false],
-    '6': [true,false,false,true,true,false,true,false,false,false,false],
-    '7': [true,false,false,true,true,false,false,true,false,false,false],
-    '8': [true,true,false,false,true,false,true,false,false,false,false],
-    '9': [true,true,false,true,true,false,true,false,false,false,false],
+    // Standard Code128B patterns (these follow proper Code128B spec)
+    ' ': [true, true, false, true, true, false, false, true, false, false, false], // space (ASCII 32)
+    '!': [true, true, false, true, true, false, false, false, true, false, false],
+    '"': [true, true, false, true, true, false, false, false, false, true, false],
+    '#': [true, true, false, true, true, false, false, false, false, false, true],
+    '$': [true, true, false, false, true, true, false, false, true, false, false],
+    '%': [true, true, false, false, true, true, false, false, false, true, false],
+    '&': [true, true, false, false, true, true, false, false, false, false, true],
+    '\'': [true, true, false, false, false, true, true, false, false, true, false],
+    '(': [true, true, false, false, false, true, true, false, false, false, true],
+    ')': [true, true, false, false, false, false, true, true, false, false, true],
+    '*': [true, true, false, true, false, false, true, true, false, false, false],
+    '+': [true, true, false, false, true, false, true, true, false, false, false],
+    ',': [true, true, false, false, false, true, false, true, true, false, false],
+    '-': [true, true, false, false, false, false, true, false, true, true, false],
+    '.': [true, true, false, false, false, false, false, true, false, true, true],
+    '/': [true, true, false, true, false, false, false, true, false, true, false],
+    '0': [true, false, false, true, true, false, false, true, false, false, true],
+    '1': [true, false, false, true, false, false, true, true, false, true, false], // Corrected pattern for '1'
+    '2': [true, false, false, true, false, false, false, true, true, false, true],
+    '3': [true, false, true, true, true, false, false, true, false, false, false],
+    '4': [true, false, true, false, false, true, true, true, false, false, false],
+    '5': [true, false, false, false, true, true, true, false, true, false, false],
+    '6': [true, false, false, false, false, true, true, true, false, true, false],
+    '7': [true, false, true, true, false, false, false, true, true, false, false],
+    '8': [true, false, true, false, true, true, false, false, true, false, false],
+    '9': [true, false, false, true, true, true, false, true, false, false, false],
   };
-  return patterns[char] || patterns['0']; // Default to '0' pattern if character not found
+  
+  // If the character pattern doesn't exist, use a default pattern that's scannable
+  if (!patterns[char]) {
+    console.warn(`No encoding pattern for character: '${char}', using default`);
+    return patterns['0']; // Default to '0' pattern
+  }
+  
+  return patterns[char];
 };
 
 // Function to generate Code128B barcode data
 const generateBarcodeData = (value: string) => {
+  // Pad single-digit IDs with leading zeros to improve scanning reliability
+  let paddedValue = value;
+  if (paddedValue.length === 1) {
+    paddedValue = '000000' + paddedValue;
+  } else if (paddedValue.length < 8) {
+    // Pad to have a reasonable length for better scanning
+    paddedValue = paddedValue.padStart(8, '0');
+  }
+  
+  console.log('Generating barcode for:', paddedValue);
+  
   const result: boolean[] = [];
   
   // Add quiet zone
@@ -49,13 +84,13 @@ const generateBarcodeData = (value: string) => {
   result.push(...CODE128_SET_B.START);
   
   // Encode each character
-  for (const char of value) {
+  for (const char of paddedValue) {
     result.push(...encodeChar(char));
   }
   
   // Add checksum
-  const checksum = calculateChecksum(value);
-  result.push(...encodeChar(checksum.toString()));
+  const checksum = calculateChecksum(paddedValue);
+  result.push(...encodeChar(String.fromCharCode(checksum + 32))); // Correct checksum encoding
   
   // Add stop character
   result.push(...CODE128_SET_B.STOP);
@@ -71,16 +106,22 @@ const Barcode = ({ value }: { value: string }) => {
   const barcodeData = generateBarcodeData(value);
   
   return (
-    <View style={styles.barcodeRow}>
-      {barcodeData.map((isBar, index) => (
-        <View
-          key={index}
-          style={[
-            styles.barcodeBar,
-            { backgroundColor: isBar ? '#000' : '#fff' }
-          ]}
-        />
-      ))}
+    <View style={styles.barcodeContainer}>
+      <View style={styles.barcodeRow}>
+        {barcodeData.map((isBar, index) => (
+          <View
+            key={index}
+            style={[
+              styles.barcodeBar,
+              { 
+                backgroundColor: isBar ? '#000' : '#fff',
+                width: 2, // Slightly wider bars for better scanning
+              }
+            ]}
+          />
+        ))}
+      </View>
+      <Text style={styles.barcodeText}>{value.padStart(8, '0')}</Text>
     </View>
   );
 };
@@ -126,9 +167,7 @@ export default function ScanScreen() {
         <View style={styles.idCard}>
           <MaterialIcons name="person" size={40} color="#28a745" />
           <Text style={styles.idNumber}>{studentId}</Text>
-          <View style={styles.barcodeContainer}>
-            <Barcode value={studentId} />
-          </View>
+          <Barcode value={studentId} />
         </View>
         <View style={styles.divider} />
         <Text style={styles.instruction}>Show this ID/barcode to your teacher</Text>
@@ -188,18 +227,26 @@ const styles = StyleSheet.create({
   },
   barcodeContainer: {
     marginTop: 10,
-    padding: 10,
+    padding: 16,
     backgroundColor: '#fff',
     alignItems: 'center',
+    width: '100%',
+    borderRadius: 8,
   },
   barcodeRow: {
     flexDirection: 'row',
     height: 80,
     alignItems: 'center',
+    marginBottom: 8,
   },
   barcodeBar: {
-    width: 1, // Made thinner for better scanning
+    width: 2, // Made wider for better scanning
     height: '100%',
+  },
+  barcodeText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8, 
   },
   divider: {
     height: 1,

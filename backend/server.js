@@ -24,6 +24,41 @@ db.connect((err) => {
   console.log('Connected to MySQL database');
 });
 
+// Add this route at the beginning of your routes to test database connectivity
+app.get('/api/db-test', (req, res) => {
+  console.log('Testing database connectivity...');
+  
+  db.query('SELECT 1 + 1 AS result', (err, results) => {
+    if (err) {
+      console.error('Database connection error:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Database connection failed',
+        details: err.message
+      });
+    }
+    
+    // Also test student table to ensure it exists and has the expected structure
+    db.query('SELECT COUNT(*) AS count FROM student', (err, results) => {
+      if (err) {
+        console.error('Error accessing student table:', err);
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Cannot access student table',
+          details: err.message
+        });
+      }
+      
+      console.log('Database connection test successful');
+      res.json({
+        success: true,
+        database: 'connected',
+        student_count: results[0].count
+      });
+    });
+  });
+});
+
 // Test endpoint
 app.get('/api/test', (req, res) => {
   db.query('SELECT 1 + 1 AS solution', (err, results) => {
@@ -200,57 +235,236 @@ app.get('/api/student/search/:studentId', (req, res) => {
   const studentId = req.params.studentId;
   console.log('Searching for student with ID:', studentId);
 
-  // First, let's check if the student exists
-  const query = `
-    SELECT 
-      student_id,
-      CONCAT(lastname, ', ', firstname, ' ', IFNULL(middlename, '')) as name,
-      current_yr_lvl as grade,
-      section
-    FROM student 
-    WHERE student_id = ?
-  `;
-  
-  // Convert studentId to number since it comes as string from params
-  const numericStudentId = parseInt(studentId, 10);
-  
-  console.log('Executing query:', query);
-  console.log('Query parameters:', [numericStudentId]);
-  
-  db.query(query, [numericStudentId], (err, results) => {
-    if (err) {
-      console.error('Database error when searching student:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to search student',
-        details: err.message
-      });
-    }
-
-    console.log('Query results:', results);
-
-    if (results.length === 0) {
-      console.log('No student found with ID:', studentId);
+  try {
+    // Log parameters for debugging
+    console.log('Student ID type:', typeof studentId);
+    console.log('Student ID value:', studentId);
+    
+    // First, let's check if the student exists by student_id only
+    const query = `
+      SELECT 
+        s.student_id,
+        s.lrn,
+        CONCAT(s.lastname, ', ', s.firstname, ' ', IFNULL(s.middlename, '')) as name,
+        s.current_yr_lvl as grade,
+        sec.section_name as section
+      FROM student s
+      LEFT JOIN section sec ON s.section_id = sec.section_id
+      WHERE s.student_id = ?
+    `;
+    
+    // Ensure we have a valid number for comparison
+    let numericStudentId;
+    try {
+      numericStudentId = parseInt(studentId, 10);
+      if (isNaN(numericStudentId)) {
+        console.log('Invalid student ID (not a number):', studentId);
+        return res.json({
+          success: true,
+          data: null
+        });
+      }
+    } catch (e) {
+      console.error('Error parsing student ID:', e);
+      numericStudentId = null;
       return res.json({
         success: true,
         data: null
       });
     }
-
-    const student = results[0];
-    const response = {
-      success: true,
-      data: {
-        student_id: student.student_id,
-        name: student.name.trim(),
-        grade: student.grade,
-        section: student.section
+    
+    console.log('Executing query:', query);
+    console.log('Query parameters:', [numericStudentId]);
+    
+    db.query(query, [numericStudentId], (err, results) => {
+      if (err) {
+        console.error('Database error when searching student:', err);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to search student',
+          details: err.message
+        });
       }
-    };
 
-    console.log('Sending response:', response);
-    res.json(response);
-  });
+      console.log('Query results:', results);
+
+      if (!results || results.length === 0) {
+        console.log('No student found with ID:', studentId);
+        return res.json({
+          success: true,
+          data: null
+        });
+      }
+
+      const student = results[0];
+      const response = {
+        success: true,
+        data: {
+          student_id: student.student_id,
+          lrn: student.lrn,
+          name: student.name ? student.name.trim() : '',
+          grade: student.grade || '',
+          section: student.section || ''
+        }
+      };
+
+      console.log('Sending response:', response);
+      res.json(response);
+    });
+  } catch (error) {
+    console.error('Unexpected error in student search endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Unexpected server error',
+      details: error.message
+    });
+  }
+});
+
+// Search students by multiple criteria
+app.get('/api/students/search', (req, res) => {
+  console.log('Searching for students with criteria:', req.query);
+  
+  try {
+    // Get search parameters from query
+    const { name, grade, section, lrn } = req.query;
+    
+    // If it looks like a numeric ID, prioritize student_id search
+    if (lrn && !isNaN(parseInt(lrn, 10))) {
+      // This is likely a student ID scan from barcode
+      const studentId = parseInt(lrn, 10);
+      
+      const exactQuery = `
+        SELECT 
+          s.student_id,
+          s.lrn,
+          CONCAT(s.lastname, ', ', s.firstname, ' ', IFNULL(s.middlename, '')) as name,
+          s.current_yr_lvl as grade,
+          sec.section_name as section
+        FROM student s
+        LEFT JOIN section sec ON s.section_id = sec.section_id
+        WHERE s.student_id = ? AND s.status = 'active'
+      `;
+      
+      console.log('Executing exact ID query:', exactQuery);
+      console.log('Query parameters:', [studentId]);
+      
+      db.query(exactQuery, [studentId], (err, results) => {
+        if (err) {
+          console.error('Database error when searching for student ID:', err);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to search student by ID',
+            details: err.message
+          });
+        }
+        
+        console.log(`Found ${results.length} students with exact ID ${studentId}`);
+        
+        if (!results) {
+          return res.json({
+            success: true,
+            data: []
+          });
+        }
+        
+        res.json({
+          success: true,
+          data: results.map(student => ({
+            student_id: student.student_id,
+            lrn: student.lrn,
+            name: student.name ? student.name.trim() : '',
+            grade: student.grade || '',
+            section: student.section || ''
+          }))
+        });
+      });
+      
+      return; // Exit early, we've handled this case
+    }
+    
+    // Regular search for other cases (name search or LRN if explicitly needed)
+    let query = `
+      SELECT 
+        s.student_id,
+        s.lrn,
+        CONCAT(s.lastname, ', ', s.firstname, ' ', IFNULL(s.middlename, '')) as name,
+        s.current_yr_lvl as grade,
+        sec.section_name as section
+      FROM student s
+      LEFT JOIN section sec ON s.section_id = sec.section_id
+      WHERE 1=1
+    `;
+    
+    // Add parameters as needed
+    const queryParams = [];
+    
+    if (name) {
+      query += " AND (s.firstname LIKE ? OR s.lastname LIKE ? OR CONCAT(s.firstname, ' ', s.lastname) LIKE ?)";
+      const searchName = `%${name}%`;
+      queryParams.push(searchName, searchName, searchName);
+    }
+    
+    if (grade) {
+      query += " AND s.current_yr_lvl = ?";
+      queryParams.push(grade);
+    }
+    
+    if (section) {
+      query += " AND sec.section_name LIKE ?";
+      queryParams.push(`%${section}%`);
+    }
+    
+    if (lrn) {
+      // Only search by LRN when in name mode or explicitly looking for LRN
+      query += " AND s.lrn LIKE ?";
+      queryParams.push(`%${lrn}%`);
+    }
+    
+    query += " AND s.status = 'active'"; // Add status check after all conditions
+    query += " LIMIT 50"; // Limit results for better performance
+    
+    console.log('Executing query:', query);
+    console.log('Query parameters:', queryParams);
+    
+    db.query(query, queryParams, (err, results) => {
+      if (err) {
+        console.error('Database error when searching students:', err);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to search students',
+          details: err.message
+        });
+      }
+
+      console.log(`Found ${results.length} students matching criteria`);
+      
+      if (!results) {
+        return res.json({
+          success: true,
+          data: []
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: results.map(student => ({
+          student_id: student.student_id,
+          lrn: student.lrn,
+          name: student.name ? student.name.trim() : '',
+          grade: student.grade || '',
+          section: student.section || ''
+        }))
+      });
+    });
+  } catch (error) {
+    console.error('Unexpected error in students search endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Unexpected server error',
+      details: error.message
+    });
+  }
 });
 
 // Get teacher's sections and subjects
@@ -828,6 +1042,72 @@ app.get('/api/attendance/status/:subjectId/:studentId', (req, res) => {
         message: 'No attendance record found for today'
       });
     }
+  });
+});
+
+// Add this route to help diagnose table structure issues
+app.get('/api/diagnose/student', (req, res) => {
+  console.log('Running student table diagnostics...');
+  
+  // First check if the table exists
+  const dbName = process.env.DB_NAME || 'lnhsportal';
+  
+  // Get column information
+  db.query(`
+    SELECT column_name, data_type, is_nullable, column_key
+    FROM information_schema.columns 
+    WHERE table_schema = ? AND table_name = 'student'
+  `, [dbName], (err, columnResults) => {
+    if (err) {
+      console.error('Error getting column information:', err);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Error getting column information',
+        details: err.message
+      });
+    }
+    
+    if (!columnResults || columnResults.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Student table not found or has no columns' 
+      });
+    }
+    
+    // Get a sample row (first row) to see the data
+    db.query('SELECT * FROM student LIMIT 1', (err, sampleResults) => {
+      if (err) {
+        console.error('Error getting sample student data:', err);
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Error getting sample data',
+          details: err.message
+        });
+      }
+      
+      const columns = columnResults.map(col => col.column_name);
+      const sampleData = sampleResults.length > 0 ? sampleResults[0] : null;
+      
+      // Return diagnostic information
+      res.json({
+        success: true,
+        columns: columns,
+        has_student_id: columns.includes('student_id'),
+        has_lrn: columns.includes('lrn'),
+        has_section: columns.includes('section'),
+        has_grade: columns.includes('current_yr_lvl'),
+        sample: sampleData ? {
+          // Only include fields we know should exist in every student table
+          student_id: sampleData.student_id,
+          lrn: sampleData.lrn,
+          // Only include these if they actually exist
+          firstname: sampleData.firstname,
+          lastname: sampleData.lastname,
+          section: sampleData.section,
+          current_yr_lvl: sampleData.current_yr_lvl
+        } : null
+      });
+    });
   });
 });
 
