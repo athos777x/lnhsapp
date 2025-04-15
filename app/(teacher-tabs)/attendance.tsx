@@ -266,6 +266,12 @@ export default function TeacherAttendance() {
         const section = sectionMap.get(sectionKey)!;
         // Check if subject doesn't already exist in the section
         if (!section.subjects.some(s => s.subject_id === item.subject_id)) {
+          console.log('Adding subject to section:', {
+            section_id: item.section_id,
+            section_name: item.section_name,
+            subject_id: item.subject_id,
+            subject_name: item.subject_name
+          });
           section.subjects.push({
             subject_id: item.subject_id,
             subject_name: item.subject_name,
@@ -421,21 +427,65 @@ export default function TeacherAttendance() {
     // Check if the subject's day matches today's day
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const currentDay = days[new Date().getDay()];
-    const hasScheduleToday = item.day === currentDay;
+    
+    // Format days nicely if it's an array in string format
+    let formattedDays = item.day;
+    if (item.day.startsWith('[') && item.day.endsWith(']')) {
+      try {
+        // Parse the JSON array string
+        const daysArray = JSON.parse(item.day);
+        if (Array.isArray(daysArray)) {
+          // Convert full day names to shorter versions and join with commas
+          formattedDays = daysArray.map(day => {
+            // Shortened day names (first 3 letters)
+            return day.substring(0, 3);
+          }).join(', ');
+        }
+      } catch (e) {
+        // If parsing fails, keep the original string
+        console.error('Error parsing days:', e);
+      }
+    }
+    
+    // Check if today's day is in the list of days
+    const hasScheduleToday = item.day.includes(currentDay);
+    
+    console.log('Rendering subject:', { 
+      subject_id: item.subject_id, 
+      subject_name: item.subject_name,
+      day: item.day,
+      formattedDays,
+      time_range: item.time_range
+    });
     
     return (
       <TouchableOpacity
         style={[
           styles.card,
-          selectedSubject?.subject_id === item.subject_id && styles.selectedCard
+          selectedSubject?.subject_id === item.subject_id && styles.selectedCard,
+          !hasScheduleToday && styles.disabledCard
         ]}
-        onPress={() => handleSubjectPress(item)}
+        onPress={() => {
+          if (hasScheduleToday) {
+            handleSubjectPress(item);
+          } else {
+            // Show a message that this subject is not scheduled for today
+            showStatusMessage(`No schedule for ${item.subject_name} on ${currentDay}`, '#dc3545');
+          }
+        }}
+        disabled={!hasScheduleToday}
       >
         <View style={styles.cardContent}>
           <View>
-            <Text style={styles.cardTitle}>{item.subject_name}</Text>
+            <Text style={[
+              styles.cardTitle, 
+              { fontSize: 20, fontWeight: '700' },
+              !hasScheduleToday && styles.disabledText
+            ]}>
+              {item.subject_name || "Unnamed Subject"}
+            </Text>
             <View style={styles.gradeBadge}>
-              <Text style={styles.gradeBadgeText}>{item.day}</Text>
+              <Text style={styles.gradeBadgeText}>{formattedDays}</Text>
               <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
               {!hasScheduleToday && (
                 <Text style={styles.noScheduleText}>No schedule for today</Text>
@@ -445,7 +495,13 @@ export default function TeacherAttendance() {
           <Ionicons 
             name="chevron-forward" 
             size={20} 
-            color={selectedSubject?.subject_id === item.subject_id ? "#28a745" : "#666"} 
+            color={
+              !hasScheduleToday 
+                ? "#ccc" 
+                : selectedSubject?.subject_id === item.subject_id 
+                  ? "#28a745" 
+                  : "#666"
+            } 
           />
         </View>
       </TouchableOpacity>
@@ -908,5 +964,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginVertical: 12,
     paddingHorizontal: 16,
+  },
+  disabledCard: {
+    backgroundColor: '#f5f5f5',
+    opacity: 0.7,
+    borderColor: '#ddd',
+    borderWidth: 1,
+  },
+  disabledText: {
+    color: '#999',
   },
 });
