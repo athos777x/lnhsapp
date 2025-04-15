@@ -266,6 +266,12 @@ export default function TeacherAttendance() {
         const section = sectionMap.get(sectionKey)!;
         // Check if subject doesn't already exist in the section
         if (!section.subjects.some(s => s.subject_id === item.subject_id)) {
+          console.log('Adding subject to section:', {
+            section_id: item.section_id,
+            section_name: item.section_name,
+            subject_id: item.subject_id,
+            subject_name: item.subject_name
+          });
           section.subjects.push({
             subject_id: item.subject_id,
             subject_name: item.subject_name,
@@ -423,6 +429,13 @@ export default function TeacherAttendance() {
     const currentDay = days[new Date().getDay()];
     const hasScheduleToday = item.day === currentDay;
     
+    console.log('Rendering subject:', { 
+      subject_id: item.subject_id, 
+      subject_name: item.subject_name,
+      day: item.day,
+      time_range: item.time_range
+    });
+    
     return (
       <TouchableOpacity
         style={[
@@ -433,7 +446,9 @@ export default function TeacherAttendance() {
       >
         <View style={styles.cardContent}>
           <View>
-            <Text style={styles.cardTitle}>{item.subject_name}</Text>
+            <Text style={[styles.cardTitle, { fontSize: 20, fontWeight: '700' }]}>
+              {item.subject_name || "Unnamed Subject"}
+            </Text>
             <View style={styles.gradeBadge}>
               <Text style={styles.gradeBadgeText}>{item.day}</Text>
               <Text style={styles.gradeBadgeText}>{item.time_range}</Text>
