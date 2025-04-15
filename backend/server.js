@@ -116,7 +116,7 @@ const roleMap = {
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   console.log(`Login attempt: username=${username}, password=${password}`);
-  const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
+  const query = 'SELECT * FROM users WHERE LOWER(username) = LOWER(?) AND password = ?';
   
   db.query(query, [username, password], (err, results) => {
     if (err) {
