@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard, SafeAreaView, Modal, Vibration, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard, SafeAreaView, Modal, Vibration, ActivityIndicator, FlatList, Animated } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { Camera } from 'expo-camera';
@@ -70,6 +70,10 @@ const ScanScreen: React.FC = () => {
   const [searchResults, setSearchResults] = useState<StudentSearchResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchMode, setSearchMode] = useState<'id' | 'name'>('id');
+  const [lastScannedData, setLastScannedData] = useState<string | null>(null);
+  const [scanCount, setScanCount] = useState(0);
+  const [scanDebugMode, setScanDebugMode] = useState(false);
+  const [lastScannedTimestamp, setLastScannedTimestamp] = useState<number | null>(null);
 
   // Get current date in a readable format
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -404,8 +408,52 @@ const ScanScreen: React.FC = () => {
 
   useEffect(() => {
     (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
+      console.log('Requesting camera permission...');
+      
+      try {
+        const { status } = await Camera.requestCameraPermissionsAsync();
+        console.log('Camera permission status:', status);
+        
+        setHasPermission(status === 'granted');
+        
+        if (status !== 'granted') {
+          console.error('Camera permission was denied');
+          Alert.alert(
+            'Camera Permission Required',
+            'Please grant camera permission to scan barcodes. The app cannot function without camera access.',
+            [
+              { 
+                text: 'Try Again', 
+                onPress: async () => {
+                  const { status } = await Camera.requestCameraPermissionsAsync();
+                  setHasPermission(status === 'granted');
+                }
+              }
+            ]
+          );
+        } else {
+          // Test if camera can be opened
+          try {
+            // This is a safer way to verify camera is working
+            console.log('Camera permission granted - camera should be available');
+            
+            // We'll rely on the camera component to handle errors if the device
+            // camera isn't working properly, which it will do automatically
+          } catch (error) {
+            console.error('Camera error:', error);
+            Alert.alert(
+              'Camera Error',
+              'Your device camera appears to be unavailable. Please restart the app or check your device settings.'
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Error requesting camera permission:', error);
+        Alert.alert(
+          'Camera Error',
+          'There was an error accessing your camera. Please check your device settings and restart the app.'
+        );
+      }
     })();
   }, []);
 
@@ -429,83 +477,125 @@ const ScanScreen: React.FC = () => {
 
   // Update the handleBarCodeScanned function
   const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
-    // Prevent multiple scans of the same code in quick succession
-    if (lastScanned === data) return;
+    // Always update these values for debugging
+    setLastScannedData(data);
+    setScanCount(prev => prev + 1);
     
-    setLastScanned(data);
-    setIsLoading(true);
-    
-    // Provide haptic feedback
+    // Provide haptic feedback for every scan (helps confirm scanner is working)
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       // Fallback to basic vibration if haptics not available
       Vibration.vibrate(100);
     }
-
+    
     // Show visual feedback
     setShowScannedOverlay(true);
     setTimeout(() => setShowScannedOverlay(false), 1000);
 
+    console.log(`Barcode scanned! Type: ${type}, Data: ${data}`);
+    
+    // Prevent multiple scans of the same code in quick succession
+    if (lastScanned === data && Date.now() - (lastScannedTimestamp || 0) < 2000) {
+      console.log('Ignoring duplicate scan within 2 seconds');
+      return;
+    }
+    
+    setLastScanned(data);
+    setLastScannedTimestamp(Date.now());
+    setIsLoading(true);
+    
     // Process the scanned data
+    if (scanDebugMode) {
+      // In debug mode, just show what was scanned but don't close camera
+      Alert.alert(
+        'Barcode Detected',
+        `Type: ${type}\nData: ${data}`,
+        [{ text: 'Continue Scanning', style: 'default' }]
+      );
+      setIsLoading(false);
+      return;
+    }
+    
+    // Normal processing
     setShowCamera(false);
     
-    // Use our existing search function by setting the search mode and text
-    setSearchMode('id');
-    setSearchText(data);
-    
-    // Wait a moment for state to update, then trigger search
-    setTimeout(() => {
-      try {
-        (async () => {
-          // Directly search with the scanned data (should be student ID)
-          const studentId = data.trim();
-          
-          // Verify it's a number
-          if (!isNaN(parseInt(studentId, 10))) {
-            try {
-              // Try exact ID search
-              const student = await api.searchStudentById(studentId);
-              if (student) {
-                setScannedStudent({
-                  id: student.student_id,
-                  lrn: student.lrn?.toString() || '',
-                  name: student.name,
-                  grade: student.grade,
-                  section: student.section,
-                  brigadaStatus: {
-                    status: 'No',
-                    remarks: ''
-                  }
-                });
-              } else {
-                // Fall back to general search
-                const results = await api.searchStudents({ lrn: studentId });
-                
-                if (results.length === 1) {
-                  handleStudentSelect(results[0]);
-                } else if (results.length > 1) {
-                  setSearchResults(results);
-                  setShowSearchResults(true);
-                } else {
-                  Alert.alert('Student Not Found', `No student found with ID: ${studentId}`);
-                }
-              }
-            } catch (error: any) {
-              console.error('Error searching student by ID:', error);
-              Alert.alert('Error', 'Failed to find student. Please try scanning again or search manually.');
-            }
-          } else {
-            Alert.alert('Invalid Barcode', 'The scanned barcode does not contain a valid student ID.');
-          }
-        })();
-      } catch (error: any) {
-        console.error('Error in barcode scanning process:', error);
-        Alert.alert('Error', 'Failed to process the scanned code. Please try again.');
-      } finally {
+    try {
+      // Clean up the scanned data - remove any non-numeric characters
+      // This helps with potential formatting in barcodes
+      const cleanedBarcode = data.replace(/[^0-9]/g, '').trim();
+      console.log('Cleaned barcode value:', cleanedBarcode);
+      
+      // Validate it's a number
+      if (!cleanedBarcode || isNaN(parseInt(cleanedBarcode, 10))) {
+        Alert.alert('Invalid Barcode', 'The scanned barcode does not contain a valid student ID.');
         setIsLoading(false);
+        return;
       }
-    }, 100);
+      
+      // Use direct ID search since we know the barcode is the student ID
+      try {
+        console.log('Searching for student with barcode ID:', cleanedBarcode);
+        const student = await api.searchStudentById(cleanedBarcode);
+        
+        if (student) {
+          console.log('Found student by ID:', student);
+          // Student found - update the UI
+          setScannedStudent({
+            id: student.student_id,
+            lrn: student.lrn?.toString() || '',
+            name: student.name,
+            grade: student.grade,
+            section: student.section,
+            brigadaStatus: {
+              status: 'No',
+              remarks: ''
+            }
+          });
+          
+          // Show success message
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else {
+          console.log('No student found with exact ID match, trying general search');
+          // If exact ID search failed, try the more flexible search
+          const results = await api.searchStudents({ lrn: cleanedBarcode });
+          
+          if (results.length === 1) {
+            // One result found - select it
+            handleStudentSelect(results[0]);
+          } else if (results.length > 1) {
+            // Multiple results - show them
+            setSearchResults(results);
+            setShowSearchResults(true);
+          } else {
+            // No results found
+            Alert.alert('Student Not Found', `No student found with ID: ${cleanedBarcode}`);
+          }
+        }
+      } catch (error: any) {
+        console.error('Error searching for student with barcode:', error);
+        
+        // Check for database errors
+        if (error.response && error.response.status === 500) {
+          const errorDetails = error.response.data?.details || '';
+          if (errorDetails.includes('Unknown column')) {
+            Alert.alert(
+              'Database Error', 
+              'There is an issue with the database configuration. Please contact your administrator.'
+            );
+          } else {
+            Alert.alert('Server Error', 'Unable to process the barcode. Please try again or search manually.');
+          }
+        } else {
+          Alert.alert('Error', 'Failed to find student. Please try scanning again or search manually.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error processing barcode:', error);
+      Alert.alert('Error', 'Failed to process the scanned code. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const navigation = useNavigation();
@@ -517,11 +607,76 @@ const ScanScreen: React.FC = () => {
   }, [navigation]);
 
   if (hasPermission === null) {
-    return <View style={styles.container}><Text>Requesting camera permission...</Text></View>;
+    return (
+      <View style={styles.permissionContainer}>
+        <MaterialIcons name="camera-alt" size={64} color="#999" />
+        <Text style={styles.permissionTitle}>Requesting Camera Access</Text>
+        <Text style={styles.permissionText}>
+          Please wait while we access your camera for barcode scanning.
+        </Text>
+        <ActivityIndicator size="large" color="#28a745" style={{ marginTop: 20 }} />
+      </View>
+    );
   }
   if (hasPermission === false) {
-    return <View style={styles.container}><Text>No access to camera</Text></View>;
+    return (
+      <View style={styles.permissionContainer}>
+        <MaterialIcons name="no-photography" size={64} color="#dc3545" />
+        <Text style={styles.permissionTitle}>Camera Access Denied</Text>
+        <Text style={styles.permissionText}>
+          Camera permission is required to scan barcodes. Please enable camera access in your device settings.
+        </Text>
+        <TouchableOpacity 
+          style={styles.permissionButton}
+          onPress={async () => {
+            const { status } = await Camera.requestCameraPermissionsAsync();
+            setHasPermission(status === 'granted');
+          }}
+        >
+          <Text style={styles.permissionButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
+
+  // Add an animated scan line
+  const AnimatedScanLine = () => {
+    const translateY = React.useRef(new Animated.Value(0)).current;
+
+    React.useEffect(() => {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(translateY, {
+            toValue: 200, // Move down
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateY, {
+            toValue: 0, // Move back up
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      
+      animation.start();
+      
+      return () => {
+        animation.stop();
+      };
+    }, [translateY]);
+
+    return (
+      <Animated.View
+        style={[
+          styles.scanLine,
+          {
+            transform: [{ translateY }],
+          },
+        ]}
+      />
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -533,9 +688,13 @@ const ScanScreen: React.FC = () => {
             barCodeTypes={[
               BarCodeScanner.Constants.BarCodeType.code128,
               BarCodeScanner.Constants.BarCodeType.ean13,
+              BarCodeScanner.Constants.BarCodeType.ean8,
               BarCodeScanner.Constants.BarCodeType.code39,
+              BarCodeScanner.Constants.BarCodeType.code93,
+              BarCodeScanner.Constants.BarCodeType.qr,
+              BarCodeScanner.Constants.BarCodeType.upc_e,
             ]}
-            onBarCodeScanned={handleBarCodeScanned}
+            onBarCodeScanned={scanDebugMode ? handleBarCodeScanned : handleBarCodeScanned}
           />
           <SafeAreaView style={styles.cameraOverlay}>
             <View style={styles.cameraHeader}>
@@ -545,18 +704,64 @@ const ScanScreen: React.FC = () => {
               >
                 <MaterialIcons name="arrow-back" size={24} color="#fff" />
               </TouchableOpacity>
-              <Text style={styles.cameraTitle}>Scan Barcode</Text>
+              <Text style={styles.cameraTitle}>Scan Student ID</Text>
+              
+              {/* Add test button for debugging */}
+              <TouchableOpacity
+                style={styles.testScanButton}
+                onPress={() => {
+                  // Simulate a scan with test data
+                  handleBarCodeScanned({ 
+                    type: 'CODE128', 
+                    data: '1' // Use a valid student ID from your database
+                  });
+                }}
+              >
+                <Text style={styles.testScanButtonText}>Test</Text>
+              </TouchableOpacity>
             </View>
+            
             <View style={styles.scanFrameContainer}>
-              <View style={styles.scanFrame} />
-              <Text style={styles.scanText}>Position barcode within frame</Text>
+              <View style={styles.scanFrame}>
+                <View style={[styles.cornerIndicator, styles.topLeftCorner]} />
+                <View style={[styles.cornerIndicator, styles.topRightCorner]} />
+                <View style={[styles.cornerIndicator, styles.bottomLeftCorner]} />
+                <View style={[styles.cornerIndicator, styles.bottomRightCorner]} />
+                
+                {/* Add animated scanning line */}
+                <AnimatedScanLine />
+              </View>
+              <Text style={styles.scanText}>Position student barcode within frame</Text>
+              <Text style={styles.scanSubText}>Keep the camera steady for best results</Text>
+              
+              {/* Add a visible indicator that shows when camera is active */}
+              <View style={styles.cameraStatusIndicator}>
+                <View style={styles.statusDot} />
+                <Text style={styles.cameraStatusText}>Camera Active</Text>
+              </View>
             </View>
+            
             {showScannedOverlay && (
               <View style={styles.scannedOverlay}>
                 <MaterialIcons name="check-circle" size={60} color="#28a745" />
                 <Text style={styles.scannedText}>Barcode Detected!</Text>
+                <Text style={styles.scannedData}>{lastScannedData}</Text>
               </View>
             )}
+            
+            <View style={styles.scanDebugPanel}>
+              <Text style={styles.scanDebugText}>
+                Scans: {scanCount} | Last: {lastScannedData ? lastScannedData.substring(0, 10) : 'None'}
+              </Text>
+              <TouchableOpacity 
+                style={styles.scanDebugButton}
+                onPress={() => setScanDebugMode(!scanDebugMode)}
+              >
+                <Text style={styles.scanDebugButtonText}>
+                  {scanDebugMode ? 'Exit Debug' : 'Debug Mode'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
         </View>
       ) : (
@@ -663,6 +868,14 @@ const ScanScreen: React.FC = () => {
               </View>
             )}
           </View>
+
+          {/* Add a loading overlay component right after the search section */}
+          {isLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color="#28a745" />
+              <Text style={styles.loadingText}>Searching for student...</Text>
+            </View>
+          )}
 
           {/* Student Card */}
           {scannedStudent && (
@@ -1342,5 +1555,165 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#28a745',
+    fontWeight: '600',
+  },
+  scanSubText: {
+    color: '#fff',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  cornerIndicator: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderColor: '#28a745',
+    borderWidth: 3,
+  },
+  topLeftCorner: {
+    top: 0,
+    left: 0,
+    borderBottomWidth: 0,
+    borderRightWidth: 0,
+    borderTopLeftRadius: 10,
+  },
+  topRightCorner: {
+    top: 0,
+    right: 0,
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    borderTopRightRadius: 10,
+  },
+  bottomLeftCorner: {
+    bottom: 0,
+    left: 0,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    borderBottomLeftRadius: 10,
+  },
+  bottomRightCorner: {
+    bottom: 0,
+    right: 0,
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderBottomRightRadius: 10,
+  },
+  scanDebugPanel: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scanDebugText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  scanDebugButton: {
+    backgroundColor: '#28a745',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  scanDebugButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  testScanButton: {
+    backgroundColor: '#28a745',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  testScanButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  scanLine: {
+    height: 2,
+    width: '80%',
+    backgroundColor: '#28a745',
+    position: 'absolute',
+    opacity: 0.8,
+  },
+  cameraStatusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#28a745',
+    marginRight: 6,
+  },
+  cameraStatusText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  scannedData: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 8,
+  },
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  permissionTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  permissionText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  permissionButton: {
+    backgroundColor: '#28a745',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 
