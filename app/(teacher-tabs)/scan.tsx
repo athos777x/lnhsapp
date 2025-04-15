@@ -713,7 +713,7 @@ const ScanScreen: React.FC = () => {
                   // Simulate a scan with test data
                   handleBarCodeScanned({ 
                     type: 'CODE128', 
-                    data: '1' // Use a valid student ID from your database
+                    data: '00000001' // Use a valid student ID from your database
                   });
                 }}
               >
