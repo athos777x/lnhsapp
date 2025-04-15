@@ -7,6 +7,7 @@ import { BarCodeScanner } from 'expo-barcode-scanner';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
 import * as Haptics from 'expo-haptics';
+import axios from 'axios';
 
 type SchoolYear = {
   school_year: string;
@@ -78,6 +79,35 @@ const ScanScreen: React.FC = () => {
     day: 'numeric'
   });
 
+  // Add this useEffect at the beginning of your component
+  useEffect(() => {
+    // Run a diagnostic test when component mounts
+    const runDiagnostics = async () => {
+      try {
+        console.log('Running API connection diagnostics...');
+        const isConnected = await api.testConnection();
+        
+        if (!isConnected) {
+          console.error('API connection test failed');
+        } else {
+          console.log('API connection successful');
+          
+          // Also test student table diagnostics
+          try {
+            const response = await axios.get(`${api.getBaseUrl()}/api/diagnose/student`);
+            console.log('Student table diagnostics:', response.data);
+          } catch (error) {
+            console.error('Error checking student table:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error running diagnostics:', error);
+      }
+    };
+
+    runDiagnostics();
+  }, []);
+
   // New function for advanced search
   const handleSearch = async () => {
     const trimmedSearchText = searchText.trim();
@@ -89,40 +119,104 @@ const ScanScreen: React.FC = () => {
         let results: StudentSearchResult[] = [];
         
         if (searchMode === 'id') {
-          // For ID/LRN search, try both endpoints since the ID could be either
-          try {
-            // If it looks like a numeric ID (small number), use exact ID search
-            if (!isNaN(parseInt(trimmedSearchText, 10)) && trimmedSearchText.length < 5) {
-              console.log('Searching by exact student ID:', trimmedSearchText);
-              // First try searchStudentById for exact match
+          // For student ID searches, prioritize exact matching
+          if (!isNaN(parseInt(trimmedSearchText, 10))) {
+            console.log('Searching by student ID:', trimmedSearchText);
+            
+            // Try searchStudentById for exact match by ID first
+            try {
               const student = await api.searchStudentById(trimmedSearchText);
               if (student) {
                 results = [student];
               } else {
-                // Then try the more flexible search
-                const lrnResults = await api.searchStudents({ lrn: trimmedSearchText });
-                results = lrnResults;
+                console.log('No exact student ID match, trying general search');
+                // If no exact match, try the general search
+                try {
+                  const searchResults = await api.searchStudents({ lrn: trimmedSearchText });
+                  results = searchResults;
+                } catch (fallbackError) {
+                  console.error('Error in fallback search:', fallbackError);
+                  // If both searches fail, show the not found message
+                  Alert.alert('Student Not Found', `No student found with ID: ${trimmedSearchText}`);
+                  setIsLoading(false);
+                  return;
+                }
               }
-            } else {
-              // For longer or non-numeric inputs, search more broadly
-              console.log('Searching by LRN or partial ID:', trimmedSearchText);
-              const lrnResults = await api.searchStudents({ lrn: trimmedSearchText });
-              results = lrnResults;
+            } catch (error: any) {
+              console.error('Error in direct ID search, falling back to general search:', error);
+              // Check if it's a server error
+              if (error.response && error.response.status === 500) {
+                // Log additional details
+                console.error('Server error details:', error.response.data);
+                
+                // Handle database schema errors specially
+                const errorDetails = error.response.data?.details || '';
+                if (errorDetails.includes('Unknown column')) {
+                  Alert.alert(
+                    'Database Error', 
+                    'There is an issue with the database configuration. Please contact your administrator.'
+                  );
+                  setIsLoading(false);
+                  return;
+                }
+              }
+              
+              // Try the general search as fallback
+              try {
+                const searchResults = await api.searchStudents({ lrn: trimmedSearchText });
+                results = searchResults;
+              } catch (fallbackError: any) {
+                console.error('Fallback search also failed:', fallbackError);
+                
+                // Check if fallback also had database error
+                if (fallbackError.response && fallbackError.response.status === 500) {
+                  const errorDetails = fallbackError.response.data?.details || '';
+                  if (errorDetails.includes('Unknown column')) {
+                    Alert.alert(
+                      'Database Error', 
+                      'There is an issue with the database configuration. Please contact your administrator.'
+                    );
+                    setIsLoading(false);
+                    return;
+                  }
+                }
+                
+                Alert.alert(
+                  'Search Error', 
+                  'Unable to search for student. Please try again or contact support.'
+                );
+                setIsLoading(false);
+                return;
+              }
             }
-          } catch (idError) {
-            console.error('Error searching by ID:', idError);
-            // Try the LRN search as a fallback
-            try {
-              const lrnResults = await api.searchStudents({ lrn: trimmedSearchText });
-              results = lrnResults;
-            } catch (lrnError) {
-              console.error('Error searching by LRN:', lrnError);
-              throw idError; // Re-throw the original error
-            }
+          } else {
+            // Not a numeric ID, just do a regular search
+            Alert.alert('Invalid ID', 'Please enter a valid student ID number');
+            setIsLoading(false);
+            return;
           }
         } else {
           // Search by name
-          results = await api.searchStudents({ name: trimmedSearchText });
+          try {
+            results = await api.searchStudents({ name: trimmedSearchText });
+          } catch (error: any) {
+            console.error('Error searching by name:', error);
+            if (error.response && error.response.status === 500) {
+              const errorDetails = error.response.data?.details || '';
+              if (errorDetails.includes('Unknown column')) {
+                Alert.alert(
+                  'Database Error', 
+                  'There is an issue with the database configuration. Please contact your administrator.'
+                );
+                setIsLoading(false);
+                return;
+              }
+            }
+            
+            Alert.alert('Search Error', 'Failed to search by name. Please try again.');
+            setIsLoading(false);
+            return;
+          }
         }
         
         setSearchResults(results);
@@ -132,10 +226,8 @@ const ScanScreen: React.FC = () => {
           // If there's only one result, select it automatically
           handleStudentSelect(results[0]);
         } else if (results.length === 0) {
-          if (searchMode === 'id' && !isNaN(parseInt(trimmedSearchText, 10))) {
+          if (searchMode === 'id') {
             Alert.alert('Student Not Found', `No student found with ID: ${trimmedSearchText}`);
-          } else if (searchMode === 'id') {
-            Alert.alert('Student Not Found', `No student found with LRN: ${trimmedSearchText}`);
           } else {
             Alert.alert('Student Not Found', `No student found with name: ${trimmedSearchText}`);
           }
@@ -150,10 +242,21 @@ const ScanScreen: React.FC = () => {
         if (error.response) {
           // The request was made and the server responded with an error status
           if (error.response.status === 500) {
-            Alert.alert(
-              'Server Error', 
-              'The server encountered an error while processing your request. Please try again later or contact technical support.'
-            );
+            console.error('Server error details:', error.response.data);
+            
+            // Check for database schema errors
+            const errorDetails = error.response.data?.details || '';
+            if (errorDetails.includes('Unknown column')) {
+              Alert.alert(
+                'Database Error', 
+                'There is an issue with the database configuration. Please contact your administrator.'
+              );
+            } else {
+              Alert.alert(
+                'Server Error', 
+                'The server encountered an error while processing your request. Please try again later.'
+              );
+            }
           } else {
             const errorMessage = error.response.data?.error || error.response.data?.details || error.message || 'Failed to search student';
             Alert.alert('Error', errorMessage);
@@ -353,85 +456,47 @@ const ScanScreen: React.FC = () => {
     
     // Wait a moment for state to update, then trigger search
     setTimeout(() => {
-      // Directly search with the trimmed data
-      const trimmedData = data.trim();
-      
       try {
         (async () => {
-          try {
-            // Try exact ID search first
-            const student = await api.searchStudentById(trimmedData);
-            if (student) {
-              // Found a match by ID
-              setScannedStudent({
-                id: student.student_id,
-                lrn: student.lrn?.toString() || '',
-                name: student.name,
-                grade: student.grade,
-                section: student.section,
-                brigadaStatus: {
-                  status: 'No',
-                  remarks: ''
-                }
-              });
-            } else {
-              // If no match by exact ID, try the more flexible search
-              try {
-                const results = await api.searchStudents({ lrn: trimmedData });
+          // Directly search with the scanned data (should be student ID)
+          const studentId = data.trim();
+          
+          // Verify it's a number
+          if (!isNaN(parseInt(studentId, 10))) {
+            try {
+              // Try exact ID search
+              const student = await api.searchStudentById(studentId);
+              if (student) {
+                setScannedStudent({
+                  id: student.student_id,
+                  lrn: student.lrn?.toString() || '',
+                  name: student.name,
+                  grade: student.grade,
+                  section: student.section,
+                  brigadaStatus: {
+                    status: 'No',
+                    remarks: ''
+                  }
+                });
+              } else {
+                // Fall back to general search
+                const results = await api.searchStudents({ lrn: studentId });
                 
                 if (results.length === 1) {
-                  // If there's only one result, select it automatically
                   handleStudentSelect(results[0]);
                 } else if (results.length > 1) {
-                  // If multiple results, show them
                   setSearchResults(results);
                   setShowSearchResults(true);
                 } else {
-                  // No results
-                  Alert.alert('Not Found', `No student found with ID/LRN: ${trimmedData}`);
+                  Alert.alert('Student Not Found', `No student found with ID: ${studentId}`);
                 }
-              } catch (lrnError) {
-                console.error('Error searching by LRN:', lrnError);
-                Alert.alert('Not Found', `No student found with ID/LRN: ${trimmedData}`);
               }
+            } catch (error: any) {
+              console.error('Error searching student by ID:', error);
+              Alert.alert('Error', 'Failed to find student. Please try scanning again or search manually.');
             }
-          } catch (error: any) {
-            console.error('Error searching student by ID:', error);
-            
-            // Try LRN search as fallback
-            try {
-              const results = await api.searchStudents({ lrn: trimmedData });
-              if (results.length > 0) {
-                if (results.length === 1) {
-                  handleStudentSelect(results[0]);
-                } else {
-                  setSearchResults(results);
-                  setShowSearchResults(true);
-                }
-              } else {
-                throw error; // Re-throw to show the original error
-              }
-            } catch (fallbackError) {
-              // Handle different types of errors
-              if (error.response) {
-                // The request was made and the server responded with an error status
-                if (error.response.status === 500) {
-                  Alert.alert(
-                    'Server Error', 
-                    'The server encountered an error while processing your request. Please try again later.'
-                  );
-                } else {
-                  const errorMessage = error.response.data?.error || error.response.data?.details || error.message || 'Failed to search student';
-                  Alert.alert('Error', errorMessage);
-                }
-              } else if (error.request) {
-                // The request was made but no response was received
-                Alert.alert('Connection Error', 'Could not connect to the server. Please check your internet connection.');
-              } else {
-                // Something else happened in making the request
-                Alert.alert('Error', error.message || 'An unexpected error occurred');
-              }
-            }
+          } else {
+            Alert.alert('Invalid Barcode', 'The scanned barcode does not contain a valid student ID.');
           }
         })();
       } catch (error: any) {
@@ -526,7 +591,7 @@ const ScanScreen: React.FC = () => {
                 onPress={() => setSearchMode('id')}
               >
                 <Text style={[styles.searchModeText, searchMode === 'id' && styles.searchModeTextActive]}>
-                  ID/LRN
+                  Student ID
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -544,7 +609,7 @@ const ScanScreen: React.FC = () => {
                 style={styles.searchInput}
                 value={searchText}
                 onChangeText={setSearchText}
-                placeholder={searchMode === 'id' ? "Enter Student ID or LRN" : "Enter Student Name"}
+                placeholder={searchMode === 'id' ? "Enter Student ID" : "Enter Student Name"}
                 placeholderTextColor="#999"
                 keyboardType={searchMode === 'id' ? "numeric" : "default"}
               />

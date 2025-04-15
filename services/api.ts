@@ -6,6 +6,9 @@ const BASE_URL = process.env.API_URL || 'http://10.0.2.2:3002';
 // If using a physical device, replace 10.0.2.2 with your computer's IP address
 // Example: const BASE_URL = 'http://192.168.1.100:3002';
 
+// At the top of the file after the BASE_URL definition
+console.log('API base URL:', BASE_URL);
+
 // Types for API responses
 interface LoginResponse {
   success: boolean;
@@ -407,12 +410,31 @@ export const api = {
   // Search student by ID
   async searchStudentById(studentId: string): Promise<StudentSearchResult | null> {
     try {
+      console.log(`API call: searchStudentById with ID: ${studentId}`);
+      
+      // Validate ID is a number before making request
+      const numericId = parseInt(studentId, 10);
+      if (isNaN(numericId)) {
+        console.warn('Invalid student ID (not a number):', studentId);
+        return null;
+      }
+      
       const response = await axios.get<StudentSearchResponse>(
         `${BASE_URL}/api/student/search/${studentId}`
       );
+      
+      console.log(`API response for student ID ${studentId}:`, response.data);
+      
       return response.data.data || null;
-    } catch (error) {
-      console.error('Search student error:', error);
+    } catch (error: any) {
+      console.error(`Search student error for ID ${studentId}:`, error);
+      
+      // Add more detailed error logging
+      if (error.response) {
+        console.error(`Response status: ${error.response.status}`);
+        console.error('Response data:', error.response.data);
+      }
+      
       throw error;
     }
   },
@@ -434,6 +456,27 @@ export const api = {
       console.error('Search students error:', error);
       throw error;
     }
+  },
+
+  // Add a diagnostic function to the api object
+  async testConnection(): Promise<boolean> {
+    try {
+      console.log('Testing API connection to:', BASE_URL);
+      const response = await axios.get(`${BASE_URL}/api/db-test`);
+      console.log('Connection test response:', response.data);
+      return response.data.success === true;
+    } catch (error: any) {
+      console.error('API connection test failed:', error);
+      if (error.code === 'ECONNREFUSED') {
+        console.error('Connection refused. Check if server is running and BASE_URL is correct.');
+      }
+      return false;
+    }
+  },
+
+  // Add a method to get the base URL
+  getBaseUrl(): string {
+    return BASE_URL;
   }
 };
 

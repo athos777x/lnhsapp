@@ -236,33 +236,47 @@ app.get('/api/student/search/:studentId', (req, res) => {
   console.log('Searching for student with ID:', studentId);
 
   try {
-    // First, let's check if the student exists by student_id
+    // Log parameters for debugging
+    console.log('Student ID type:', typeof studentId);
+    console.log('Student ID value:', studentId);
+    
+    // First, let's check if the student exists by student_id only
     const query = `
       SELECT 
-        student_id,
-        lrn,
-        CONCAT(lastname, ', ', firstname, ' ', IFNULL(middlename, '')) as name,
-        current_yr_lvl as grade,
-        section
-      FROM student 
-      WHERE student_id = ? OR lrn = ?
+        s.student_id,
+        s.lrn,
+        CONCAT(s.lastname, ', ', s.firstname, ' ', IFNULL(s.middlename, '')) as name,
+        s.current_yr_lvl as grade,
+        sec.section_name as section
+      FROM student s
+      LEFT JOIN section sec ON s.section_id = sec.section_id
+      WHERE s.student_id = ?
     `;
     
-    // Convert studentId to number for comparison
+    // Ensure we have a valid number for comparison
     let numericStudentId;
     try {
       numericStudentId = parseInt(studentId, 10);
       if (isNaN(numericStudentId)) {
-        numericStudentId = null;
+        console.log('Invalid student ID (not a number):', studentId);
+        return res.json({
+          success: true,
+          data: null
+        });
       }
     } catch (e) {
+      console.error('Error parsing student ID:', e);
       numericStudentId = null;
+      return res.json({
+        success: true,
+        data: null
+      });
     }
     
     console.log('Executing query:', query);
-    console.log('Query parameters:', [numericStudentId, studentId]);
+    console.log('Query parameters:', [numericStudentId]);
     
-    db.query(query, [numericStudentId, studentId], (err, results) => {
+    db.query(query, [numericStudentId], (err, results) => {
       if (err) {
         console.error('Database error when searching student:', err);
         return res.status(500).json({
@@ -275,7 +289,7 @@ app.get('/api/student/search/:studentId', (req, res) => {
       console.log('Query results:', results);
 
       if (!results || results.length === 0) {
-        console.log('No student found with ID or LRN:', studentId);
+        console.log('No student found with ID:', studentId);
         return res.json({
           success: true,
           data: null
@@ -315,9 +329,9 @@ app.get('/api/students/search', (req, res) => {
     // Get search parameters from query
     const { name, grade, section, lrn } = req.query;
     
-    // If it looks like a student ID search, use exact match
-    if (lrn && !isNaN(parseInt(lrn, 10)) && lrn.length < 5) {
-      // This is likely a student ID search, so we'll do an exact match
+    // If it looks like a numeric ID, prioritize student_id search
+    if (lrn && !isNaN(parseInt(lrn, 10))) {
+      // This is likely a student ID scan from barcode
       const studentId = parseInt(lrn, 10);
       
       const exactQuery = `
@@ -369,7 +383,7 @@ app.get('/api/students/search', (req, res) => {
       return; // Exit early, we've handled this case
     }
     
-    // Regular search for other cases
+    // Regular search for other cases (name search or LRN if explicitly needed)
     let query = `
       SELECT 
         s.student_id,
@@ -402,15 +416,9 @@ app.get('/api/students/search', (req, res) => {
     }
     
     if (lrn) {
-      // For LRN, we want to be more precise - if it's long enough to be an LRN do a more specific search
-      if (lrn.length >= 5) {
-        query += " AND (s.lrn LIKE ?)";
-        queryParams.push(`%${lrn}%`);
-      } else {
-        // For short search terms, be more restrictive to avoid returning all students
-        query += " AND (s.lrn = ? OR s.lrn LIKE ?)";
-        queryParams.push(lrn, `${lrn}%`); // Exact match or starts with
-      }
+      // Only search by LRN when in name mode or explicitly looking for LRN
+      query += " AND s.lrn LIKE ?";
+      queryParams.push(`%${lrn}%`);
     }
     
     query += " AND s.status = 'active'"; // Add status check after all conditions
