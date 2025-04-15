@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard, SafeAreaView, Modal, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Keyboard, SafeAreaView, Modal, Vibration, ActivityIndicator, FlatList } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { Camera } from 'expo-camera';
@@ -35,10 +35,19 @@ type BrigadaStatus = {
   remarks?: string;
 };
 
+type StudentSearchResult = {
+  student_id: string;
+  lrn?: string | number;
+  name: string;
+  grade: string;
+  section: string;
+};
+
 const ScanScreen: React.FC = () => {
   const [studentId, setStudentId] = useState('');
   const [scannedStudent, setScannedStudent] = useState<{
     id: string;
+    lrn?: string;
     name: string;
     grade: string;
     section: string;
@@ -56,6 +65,10 @@ const ScanScreen: React.FC = () => {
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [showScannedOverlay, setShowScannedOverlay] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchResults, setSearchResults] = useState<StudentSearchResult[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searchMode, setSearchMode] = useState<'id' | 'name'>('id');
 
   // Get current date in a readable format
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -65,7 +78,117 @@ const ScanScreen: React.FC = () => {
     day: 'numeric'
   });
 
-  // Update the handleSubmit function to use the API
+  // New function for advanced search
+  const handleSearch = async () => {
+    const trimmedSearchText = searchText.trim();
+    if (trimmedSearchText) {
+      setIsLoading(true);
+      Keyboard.dismiss();
+      
+      try {
+        let results: StudentSearchResult[] = [];
+        
+        if (searchMode === 'id') {
+          // For ID/LRN search, try both endpoints since the ID could be either
+          try {
+            // If it looks like a numeric ID (small number), use exact ID search
+            if (!isNaN(parseInt(trimmedSearchText, 10)) && trimmedSearchText.length < 5) {
+              console.log('Searching by exact student ID:', trimmedSearchText);
+              // First try searchStudentById for exact match
+              const student = await api.searchStudentById(trimmedSearchText);
+              if (student) {
+                results = [student];
+              } else {
+                // Then try the more flexible search
+                const lrnResults = await api.searchStudents({ lrn: trimmedSearchText });
+                results = lrnResults;
+              }
+            } else {
+              // For longer or non-numeric inputs, search more broadly
+              console.log('Searching by LRN or partial ID:', trimmedSearchText);
+              const lrnResults = await api.searchStudents({ lrn: trimmedSearchText });
+              results = lrnResults;
+            }
+          } catch (idError) {
+            console.error('Error searching by ID:', idError);
+            // Try the LRN search as a fallback
+            try {
+              const lrnResults = await api.searchStudents({ lrn: trimmedSearchText });
+              results = lrnResults;
+            } catch (lrnError) {
+              console.error('Error searching by LRN:', lrnError);
+              throw idError; // Re-throw the original error
+            }
+          }
+        } else {
+          // Search by name
+          results = await api.searchStudents({ name: trimmedSearchText });
+        }
+        
+        setSearchResults(results);
+        setShowSearchResults(results.length > 0);
+        
+        if (results.length === 1) {
+          // If there's only one result, select it automatically
+          handleStudentSelect(results[0]);
+        } else if (results.length === 0) {
+          if (searchMode === 'id' && !isNaN(parseInt(trimmedSearchText, 10))) {
+            Alert.alert('Student Not Found', `No student found with ID: ${trimmedSearchText}`);
+          } else if (searchMode === 'id') {
+            Alert.alert('Student Not Found', `No student found with LRN: ${trimmedSearchText}`);
+          } else {
+            Alert.alert('Student Not Found', `No student found with name: ${trimmedSearchText}`);
+          }
+        } else {
+          // Multiple results found - just show them
+          console.log(`Found ${results.length} matching students`);
+        }
+      } catch (error: any) {
+        console.error('Error searching student:', error);
+        
+        // Handle different types of errors
+        if (error.response) {
+          // The request was made and the server responded with an error status
+          if (error.response.status === 500) {
+            Alert.alert(
+              'Server Error', 
+              'The server encountered an error while processing your request. Please try again later or contact technical support.'
+            );
+          } else {
+            const errorMessage = error.response.data?.error || error.response.data?.details || error.message || 'Failed to search student';
+            Alert.alert('Error', errorMessage);
+          }
+        } else if (error.request) {
+          // The request was made but no response was received
+          Alert.alert('Connection Error', 'Could not connect to the server. Please check your internet connection and try again.');
+        } else {
+          // Something else happened in making the request
+          Alert.alert('Error', error.message || 'An unexpected error occurred');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Handle student selection from search results
+  const handleStudentSelect = (student: StudentSearchResult) => {
+    setScannedStudent({
+      id: student.student_id,
+      lrn: student.lrn?.toString() || '',
+      name: student.name,
+      grade: student.grade,
+      section: student.section,
+      brigadaStatus: {
+        status: 'No',
+        remarks: ''
+      }
+    });
+    setShowSearchResults(false);
+    setSearchText('');
+  };
+
+  // Update the existing handleSubmit to use our new search function
   const handleSubmit = async () => {
     if (studentId.trim()) {
       setIsLoading(true);
@@ -75,6 +198,7 @@ const ScanScreen: React.FC = () => {
         if (student) {
           setScannedStudent({
             id: student.student_id,
+            lrn: student.lrn?.toString() || '',
             name: student.name,
             grade: student.grade,
             section: student.section,
@@ -200,7 +324,7 @@ const ScanScreen: React.FC = () => {
     fetchSchoolYears();
   }, []);
 
-  // Update the handleBarCodeScanned function to use the API
+  // Update the handleBarCodeScanned function
   const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
     // Prevent multiple scans of the same code in quick succession
     if (lastScanned === data) return;
@@ -222,33 +346,101 @@ const ScanScreen: React.FC = () => {
 
     // Process the scanned data
     setShowCamera(false);
-    setStudentId(data);
     
-    try {
-      const student = await api.searchStudentById(data);
-      if (student) {
-        setScannedStudent({
-          id: student.student_id,
-          name: student.name,
-          grade: student.grade,
-          section: student.section,
-          brigadaStatus: {
-            status: 'No',
-            remarks: ''
+    // Use our existing search function by setting the search mode and text
+    setSearchMode('id');
+    setSearchText(data);
+    
+    // Wait a moment for state to update, then trigger search
+    setTimeout(() => {
+      // Directly search with the trimmed data
+      const trimmedData = data.trim();
+      
+      try {
+        (async () => {
+          try {
+            // Try exact ID search first
+            const student = await api.searchStudentById(trimmedData);
+            if (student) {
+              // Found a match by ID
+              setScannedStudent({
+                id: student.student_id,
+                lrn: student.lrn?.toString() || '',
+                name: student.name,
+                grade: student.grade,
+                section: student.section,
+                brigadaStatus: {
+                  status: 'No',
+                  remarks: ''
+                }
+              });
+            } else {
+              // If no match by exact ID, try the more flexible search
+              try {
+                const results = await api.searchStudents({ lrn: trimmedData });
+                
+                if (results.length === 1) {
+                  // If there's only one result, select it automatically
+                  handleStudentSelect(results[0]);
+                } else if (results.length > 1) {
+                  // If multiple results, show them
+                  setSearchResults(results);
+                  setShowSearchResults(true);
+                } else {
+                  // No results
+                  Alert.alert('Not Found', `No student found with ID/LRN: ${trimmedData}`);
+                }
+              } catch (lrnError) {
+                console.error('Error searching by LRN:', lrnError);
+                Alert.alert('Not Found', `No student found with ID/LRN: ${trimmedData}`);
+              }
+            }
+          } catch (error: any) {
+            console.error('Error searching student by ID:', error);
+            
+            // Try LRN search as fallback
+            try {
+              const results = await api.searchStudents({ lrn: trimmedData });
+              if (results.length > 0) {
+                if (results.length === 1) {
+                  handleStudentSelect(results[0]);
+                } else {
+                  setSearchResults(results);
+                  setShowSearchResults(true);
+                }
+              } else {
+                throw error; // Re-throw to show the original error
+              }
+            } catch (fallbackError) {
+              // Handle different types of errors
+              if (error.response) {
+                // The request was made and the server responded with an error status
+                if (error.response.status === 500) {
+                  Alert.alert(
+                    'Server Error', 
+                    'The server encountered an error while processing your request. Please try again later.'
+                  );
+                } else {
+                  const errorMessage = error.response.data?.error || error.response.data?.details || error.message || 'Failed to search student';
+                  Alert.alert('Error', errorMessage);
+                }
+              } else if (error.request) {
+                // The request was made but no response was received
+                Alert.alert('Connection Error', 'Could not connect to the server. Please check your internet connection.');
+              } else {
+                // Something else happened in making the request
+                Alert.alert('Error', error.message || 'An unexpected error occurred');
+              }
+            }
           }
-        });
-        setStudentId('');
-      } else {
-        Alert.alert('Not Found', `No student found with ID: ${data}`);
-        setStudentId('');
+        })();
+      } catch (error: any) {
+        console.error('Error in barcode scanning process:', error);
+        Alert.alert('Error', 'Failed to process the scanned code. Please try again.');
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error: any) {
-      console.error('Error searching student:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to search student';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+    }, 100);
   };
 
   const navigation = useNavigation();
@@ -327,29 +519,84 @@ const ScanScreen: React.FC = () => {
 
           {/* Search Section */}
           <View style={styles.searchSection}>
+            {/* Search Mode Toggle */}
+            <View style={styles.searchModeToggle}>
+              <TouchableOpacity
+                style={[styles.searchModeButton, searchMode === 'id' && styles.searchModeActive]}
+                onPress={() => setSearchMode('id')}
+              >
+                <Text style={[styles.searchModeText, searchMode === 'id' && styles.searchModeTextActive]}>
+                  ID/LRN
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.searchModeButton, searchMode === 'name' && styles.searchModeActive]}
+                onPress={() => setSearchMode('name')}
+              >
+                <Text style={[styles.searchModeText, searchMode === 'name' && styles.searchModeTextActive]}>
+                  Name
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
             <View style={styles.searchInputContainer}>
               <TextInput
                 style={styles.searchInput}
-                value={studentId}
-                onChangeText={setStudentId}
-                placeholder="Enter Student ID"
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholder={searchMode === 'id' ? "Enter Student ID or LRN" : "Enter Student Name"}
                 placeholderTextColor="#999"
-                keyboardType="numeric"
-                maxLength={10}
+                keyboardType={searchMode === 'id' ? "numeric" : "default"}
               />
               <TouchableOpacity 
                 style={styles.searchButton}
-                onPress={handleSubmit}
+                onPress={handleSearch}
+                disabled={isLoading}
               >
-                <MaterialIcons name="search" size={24} color="#fff" />
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <MaterialIcons name="search" size={24} color="#fff" />
+                )}
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.scanButton}
                 onPress={() => setShowCamera(true)}
+                disabled={isLoading}
               >
                 <MaterialIcons name="qr-code-scanner" size={24} color="#28a745" />
               </TouchableOpacity>
             </View>
+            
+            {/* Search Results */}
+            {showSearchResults && (
+              <View style={styles.searchResultsContainer}>
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={(item) => item.student_id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity 
+                      style={styles.searchResultItem}
+                      onPress={() => handleStudentSelect(item)}
+                    >
+                      <View style={styles.searchResultContent}>
+                        <Text style={styles.searchResultName}>{item.name}</Text>
+                        <Text style={styles.searchResultDetails}>
+                          Grade {item.grade} • {item.section}
+                        </Text>
+                        <View style={styles.searchResultIdContainer}>
+                          <Text style={styles.searchResultID}>ID: {item.student_id}</Text>
+                          {item.lrn && (
+                            <Text style={styles.searchResultLRN}>LRN: {item.lrn}</Text>
+                          )}
+                        </View>
+                      </View>
+                      <MaterialIcons name="chevron-right" size={24} color="#ccc" />
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            )}
           </View>
 
           {/* Student Card */}
@@ -364,6 +611,9 @@ const ScanScreen: React.FC = () => {
                       Grade {scannedStudent.grade} • {scannedStudent.section}
                     </Text>
                     <Text style={styles.studentId}>ID: {scannedStudent.id}</Text>
+                    {scannedStudent.lrn && (
+                      <Text style={styles.studentLrn}>LRN: {scannedStudent.lrn}</Text>
+                    )}
                   </View>
                 </View>
 
@@ -951,5 +1201,81 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginTop: 16,
+  },
+  searchModeToggle: {
+    flexDirection: 'row',
+    marginBottom: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f0f0f0',
+  },
+  searchModeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  searchModeActive: {
+    backgroundColor: '#28a745',
+  },
+  searchModeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  searchModeTextActive: {
+    color: '#fff',
+  },
+  searchResultsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginTop: 12,
+    maxHeight: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchResultContent: {
+    flex: 1,
+  },
+  searchResultName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  searchResultDetails: {
+    fontSize: 14,
+    color: '#666',
+  },
+  searchResultIdContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 2,
+  },
+  searchResultID: {
+    fontSize: 12,
+    color: '#888',
+  },
+  searchResultLRN: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  studentLrn: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
   },
 }); 

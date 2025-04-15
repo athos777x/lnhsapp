@@ -171,6 +171,7 @@ interface StudentDailyAttendanceResponse {
 
 interface StudentSearchResult {
   student_id: string;
+  lrn?: string | number;
   name: string;
   grade: string;
   section: string;
@@ -179,6 +180,12 @@ interface StudentSearchResult {
 interface StudentSearchResponse {
   success: boolean;
   data?: StudentSearchResult;
+  error?: string;
+}
+
+interface StudentsSearchResponse {
+  success: boolean;
+  data?: StudentSearchResult[];
   error?: string;
 }
 
@@ -406,6 +413,25 @@ export const api = {
       return response.data.data || null;
     } catch (error) {
       console.error('Search student error:', error);
+      throw error;
+    }
+  },
+  
+  // Search students by various criteria
+  async searchStudents(searchParams: { 
+    name?: string; 
+    grade?: string; 
+    section?: string;
+    lrn?: string;
+  }): Promise<StudentSearchResult[]> {
+    try {
+      const response = await axios.get<StudentsSearchResponse>(
+        `${BASE_URL}/api/students/search`, 
+        { params: searchParams }
+      );
+      return response.data.data || [];
+    } catch (error) {
+      console.error('Search students error:', error);
       throw error;
     }
   }
