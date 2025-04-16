@@ -477,11 +477,7 @@ app.get('/api/teacher/sections/:employeeId/:schoolYearId', (req, res) => {
     SELECT 
         CONCAT('Grade ', a.grade_level) AS grade_level, 
         c.section_name, 
-        CASE
-          WHEN a.elective = '0' THEN b.subject_name
-          WHEN a.elective = '1' THEN e.name
-          ELSE b.subject_name
-        END AS subject_name,
+        b.subject_name,
         a.section_id,
         a.subject_id,
         CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range,
@@ -490,7 +486,6 @@ app.get('/api/teacher/sections/:employeeId/:schoolYearId', (req, res) => {
       LEFT JOIN SUBJECT b ON a.subject_id = b.subject_id 
       LEFT JOIN section c ON a.section_id = c.section_id 
       LEFT JOIN employee d ON a.teacher_id = d.employee_id 
-      LEFT JOIN elective e ON a.subject_id = e.elective_id AND a.elective = '1'
       LEFT JOIN school_year f ON a.school_year_id = f.school_year_id
       WHERE d.employee_id = ? AND a.schedule_status = 'Approved' AND a.school_year_id = ?`;
 
