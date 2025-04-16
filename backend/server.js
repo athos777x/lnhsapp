@@ -1110,6 +1110,116 @@ app.get('/api/diagnose/student', (req, res) => {
   });
 });
 
+// Brigada Eskwela endpoints
+app.post('/api/brigada-eskwela/remarks', (req, res) => {
+  const { studentId, remarks } = req.body; // Extract studentId and remarks from the request body
+
+  if (!studentId || !remarks) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing studentId or remarks' 
+    });
+  }
+
+  const query = `
+    UPDATE brigada_details SET remarks = ? WHERE student_id = ?
+  `;
+
+  const queryParams = [remarks, studentId];
+
+  db.query(query, queryParams, (err, results) => {
+    if (err) {
+      console.error('Error inserting brigada details:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to insert brigada details',
+        details: err.message 
+      });
+    }
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Brigada details added successfully' 
+    });
+  });
+});
+
+app.put('/api/brigada-eskwela/:studentId', (req, res) => {
+  const { studentId } = req.params;
+  const { brigada_attendance } = req.body; // Only brigada_attendance is required
+
+  // Check if brigada_attendance is provided (0 or 1)
+  if (brigada_attendance === undefined) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing brigada_attendance' 
+    });
+  }
+
+  // Update the brigada_eskwela value in the student table
+  const query = `
+    UPDATE brigada_details
+    SET brigada_status = ?
+    WHERE student_id = ?
+  `;
+
+  const queryParams = [brigada_attendance ? 'Attended' : 'Not Attended', studentId]; // Set brigada_eskwela to 1 for "Present" or 0 for "No"
+
+  db.query(query, queryParams, (err, results) => {
+    if (err) {
+      console.error('Error updating student attendance:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to update student attendance',
+        details: err.message
+      });
+    }
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Student attendance updated successfully' 
+    });
+  });
+});
+
+// Add endpoint to get Brigada status for a student
+app.get('/api/brigada-eskwela/:studentId', (req, res) => {
+  const { studentId } = req.params;
+
+  const query = `
+    SELECT brigada_status, remarks 
+    FROM brigada_details 
+    WHERE student_id = ?
+  `;
+
+  db.query(query, [studentId], (err, results) => {
+    if (err) {
+      console.error('Error fetching brigada status:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch brigada status',
+        details: err.message 
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'No brigada record found for this student' 
+      });
+    }
+
+    const brigadaRecord = results[0];
+    res.json({
+      success: true,
+      data: {
+        status: brigadaRecord.brigada_status === 'Attended' ? 'Yes' : 'No',
+        remarks: brigadaRecord.remarks || ''
+      }
+    });
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
