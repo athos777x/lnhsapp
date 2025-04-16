@@ -477,7 +477,58 @@ export const api = {
   // Add a method to get the base URL
   getBaseUrl(): string {
     return BASE_URL;
-  }
+  },
+
+  // Update Brigada Eskwela attendance status
+  async updateBrigadaStatus(studentId: number, status: boolean): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await axios.put(`${BASE_URL}/api/brigada-eskwela/${studentId}`, {
+        brigada_attendance: status ? 1 : 0
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('API error updating brigada status:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to update brigada status'
+      };
+    }
+  },
+
+  // Update Brigada Eskwela remarks
+  async updateBrigadaRemarks(studentId: number, remarks: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/brigada-eskwela/remarks`, {
+        studentId,
+        remarks
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('API error updating brigada remarks:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to update brigada remarks'
+      };
+    }
+  },
+
+  // Get Brigada Eskwela status for a student
+  async getBrigadaStatus(studentId: number): Promise<{ 
+    success: boolean; 
+    data?: { status: 'Yes' | 'No'; remarks: string }; 
+    error?: string 
+  }> {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/brigada-eskwela/${studentId}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('API error getting brigada status:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to get brigada status'
+      };
+    }
+  },
 };
 
 export default api; 

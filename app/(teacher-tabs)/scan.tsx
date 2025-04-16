@@ -279,7 +279,8 @@ const ScanScreen: React.FC = () => {
   };
 
   // Handle student selection from search results
-  const handleStudentSelect = (student: StudentSearchResult) => {
+  const handleStudentSelect = async (student: StudentSearchResult) => {
+    // First set the student with default brigada status
     setScannedStudent({
       id: student.student_id,
       lrn: student.lrn?.toString() || '',
@@ -291,6 +292,25 @@ const ScanScreen: React.FC = () => {
         remarks: ''
       }
     });
+    
+    // Then fetch and update the brigada status
+    try {
+      const brigadaResponse = await api.getBrigadaStatus(parseInt(student.student_id));
+      if (brigadaResponse.success && brigadaResponse.data) {
+        // Update with actual brigada status
+        setScannedStudent(prev => prev ? {
+          ...prev,
+          brigadaStatus: {
+            status: brigadaResponse.data?.status || 'No',
+            remarks: brigadaResponse.data?.remarks || ''
+          }
+        } : null);
+      }
+    } catch (error) {
+      console.error('Error fetching brigada status:', error);
+      // Continue with default "No" status
+    }
+    
     setShowSearchResults(false);
     setSearchText('');
   };
@@ -303,6 +323,7 @@ const ScanScreen: React.FC = () => {
       try {
         const student = await api.searchStudentById(studentId);
         if (student) {
+          // Set initial student data
           setScannedStudent({
             id: student.student_id,
             lrn: student.lrn?.toString() || '',
@@ -314,6 +335,25 @@ const ScanScreen: React.FC = () => {
               remarks: ''
             }
           });
+          
+          // Fetch and update brigada status
+          try {
+            const brigadaResponse = await api.getBrigadaStatus(parseInt(student.student_id));
+            if (brigadaResponse.success && brigadaResponse.data) {
+              // Update with actual brigada status
+              setScannedStudent(prev => prev ? {
+                ...prev,
+                brigadaStatus: {
+                  status: brigadaResponse.data?.status || 'No',
+                  remarks: brigadaResponse.data?.remarks || ''
+                }
+              } : null);
+            }
+          } catch (error) {
+            console.error('Error fetching brigada status:', error);
+            // Continue with default "No" status
+          }
+          
           setStudentId('');
         } else {
           Alert.alert('Not Found', `No student found with ID: ${studentId}`);
@@ -394,8 +434,23 @@ const ScanScreen: React.FC = () => {
       //   remarks: remarks
       // });
       
-      console.log('Updating attendance:', { studentId, status, remarks });
+      // First update the attendance status
+      const statusResponse = await api.updateBrigadaStatus(parseInt(studentId), status);
+      if (!statusResponse.success) {
+        throw new Error(statusResponse.error || 'Failed to update attendance status');
+      }
+      
+      // Then update remarks if provided
+      if (remarks.trim()) {
+        const remarksResponse = await api.updateBrigadaRemarks(parseInt(studentId), remarks);
+        if (!remarksResponse.success) {
+          throw new Error(remarksResponse.error || 'Failed to update remarks');
+        }
+      }
+      
+      console.log('Successfully updated attendance:', { studentId, status, remarks });
     } catch (error) {
+      console.error('Error updating attendance:', error);
       throw new Error('Failed to update attendance');
     }
   };
@@ -552,6 +607,24 @@ const ScanScreen: React.FC = () => {
               remarks: ''
             }
           });
+          
+          // Fetch brigada status
+          try {
+            const brigadaResponse = await api.getBrigadaStatus(parseInt(student.student_id));
+            if (brigadaResponse.success && brigadaResponse.data) {
+              // Update with actual brigada status
+              setScannedStudent(prev => prev ? {
+                ...prev,
+                brigadaStatus: {
+                  status: brigadaResponse.data?.status || 'No',
+                  remarks: brigadaResponse.data?.remarks || ''
+                }
+              } : null);
+            }
+          } catch (error) {
+            console.error('Error fetching brigada status:', error);
+            // Continue with default "No" status
+          }
           
           // Show success message
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

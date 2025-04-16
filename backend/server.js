@@ -477,11 +477,7 @@ app.get('/api/teacher/sections/:employeeId/:schoolYearId', (req, res) => {
     SELECT 
         CONCAT('Grade ', a.grade_level) AS grade_level, 
         c.section_name, 
-        CASE
-          WHEN a.elective = '0' THEN b.subject_name
-          WHEN a.elective = '1' THEN e.name
-          ELSE b.subject_name
-        END AS subject_name,
+        b.subject_name,
         a.section_id,
         a.subject_id,
         CONCAT(TIME_FORMAT(a.time_start, '%h:%i %p'), ' - ', TIME_FORMAT(a.time_end, '%h:%i %p')) AS time_range,
@@ -490,7 +486,6 @@ app.get('/api/teacher/sections/:employeeId/:schoolYearId', (req, res) => {
       LEFT JOIN SUBJECT b ON a.subject_id = b.subject_id 
       LEFT JOIN section c ON a.section_id = c.section_id 
       LEFT JOIN employee d ON a.teacher_id = d.employee_id 
-      LEFT JOIN elective e ON a.subject_id = e.elective_id AND a.elective = '1'
       LEFT JOIN school_year f ON a.school_year_id = f.school_year_id
       WHERE d.employee_id = ? AND a.schedule_status = 'Approved' AND a.school_year_id = ?`;
 
@@ -1111,6 +1106,116 @@ app.get('/api/diagnose/student', (req, res) => {
           current_yr_lvl: sampleData.current_yr_lvl
         } : null
       });
+    });
+  });
+});
+
+// Brigada Eskwela endpoints
+app.post('/api/brigada-eskwela/remarks', (req, res) => {
+  const { studentId, remarks } = req.body; // Extract studentId and remarks from the request body
+
+  if (!studentId || !remarks) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing studentId or remarks' 
+    });
+  }
+
+  const query = `
+    UPDATE brigada_details SET remarks = ? WHERE student_id = ?
+  `;
+
+  const queryParams = [remarks, studentId];
+
+  db.query(query, queryParams, (err, results) => {
+    if (err) {
+      console.error('Error inserting brigada details:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to insert brigada details',
+        details: err.message 
+      });
+    }
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Brigada details added successfully' 
+    });
+  });
+});
+
+app.put('/api/brigada-eskwela/:studentId', (req, res) => {
+  const { studentId } = req.params;
+  const { brigada_attendance } = req.body; // Only brigada_attendance is required
+
+  // Check if brigada_attendance is provided (0 or 1)
+  if (brigada_attendance === undefined) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing brigada_attendance' 
+    });
+  }
+
+  // Update the brigada_eskwela value in the student table
+  const query = `
+    UPDATE brigada_details
+    SET brigada_status = ?
+    WHERE student_id = ?
+  `;
+
+  const queryParams = [brigada_attendance ? 'Attended' : 'Not Attended', studentId]; // Set brigada_eskwela to 1 for "Present" or 0 for "No"
+
+  db.query(query, queryParams, (err, results) => {
+    if (err) {
+      console.error('Error updating student attendance:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to update student attendance',
+        details: err.message
+      });
+    }
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Student attendance updated successfully' 
+    });
+  });
+});
+
+// Add endpoint to get Brigada status for a student
+app.get('/api/brigada-eskwela/:studentId', (req, res) => {
+  const { studentId } = req.params;
+
+  const query = `
+    SELECT brigada_status, remarks 
+    FROM brigada_details 
+    WHERE student_id = ?
+  `;
+
+  db.query(query, [studentId], (err, results) => {
+    if (err) {
+      console.error('Error fetching brigada status:', err);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch brigada status',
+        details: err.message 
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'No brigada record found for this student' 
+      });
+    }
+
+    const brigadaRecord = results[0];
+    res.json({
+      success: true,
+      data: {
+        status: brigadaRecord.brigada_status === 'Attended' ? 'Yes' : 'No',
+        remarks: brigadaRecord.remarks || ''
+      }
     });
   });
 });
