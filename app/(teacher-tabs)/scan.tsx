@@ -533,6 +533,7 @@ const ScanScreen: React.FC = () => {
   // Update the handleBarCodeScanned function
   const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
     // Always update these values for debugging
+    console.log(`Raw barcode scanned - Type: ${type}, Data: ${data}`);
     setLastScannedData(data);
     setScanCount(prev => prev + 1);
     
@@ -547,12 +548,11 @@ const ScanScreen: React.FC = () => {
     // Show visual feedback
     setShowScannedOverlay(true);
     setTimeout(() => setShowScannedOverlay(false), 1000);
-
-    console.log(`Barcode scanned! Type: ${type}, Data: ${data}`);
     
     // Prevent multiple scans of the same code in quick succession
-    if (lastScanned === data && Date.now() - (lastScannedTimestamp || 0) < 2000) {
-      console.log('Ignoring duplicate scan within 2 seconds');
+    // Increased timeout to 3 seconds to avoid issues with slow processing
+    if (lastScanned === data && Date.now() - (lastScannedTimestamp || 0) < 3000) {
+      console.log('Ignoring duplicate scan within 3 seconds');
       return;
     }
     
@@ -576,22 +576,74 @@ const ScanScreen: React.FC = () => {
     setShowCamera(false);
     
     try {
-      // Clean up the scanned data - remove any non-numeric characters
-      // This helps with potential formatting in barcodes
-      const cleanedBarcode = data.replace(/[^0-9]/g, '').trim();
-      console.log('Cleaned barcode value:', cleanedBarcode);
+      // Try different approaches to get a valid student ID from the barcode
+      let processedBarcode = data;
       
-      // Validate it's a number
-      if (!cleanedBarcode || isNaN(parseInt(cleanedBarcode, 10))) {
-        Alert.alert('Invalid Barcode', 'The scanned barcode does not contain a valid student ID.');
+      // Log the original data for debugging
+      console.log('Original barcode data:', data);
+      
+      // 1. First try: Clean up the barcode data by removing non-numeric characters
+      let cleanedBarcode = data.replace(/[^0-9]/g, '').trim();
+      console.log('Cleaned numeric-only barcode:', cleanedBarcode);
+      
+      // 2. Check if the barcode starts with special characters/prefixes
+      // Some barcode scanners add prefixes like "%B" or have special formats
+      if (data.startsWith('%') || data.includes('^')) {
+        console.log('Special format barcode detected, checking for embedded numbers');
+        // Extract sequences of digits that are at least 5 characters long 
+        // (assuming student IDs are at least 5 digits)
+        const matches = data.match(/\d{5,}/g);
+        if (matches && matches.length > 0) {
+          // Use the first long numeric sequence found
+          cleanedBarcode = matches[0];
+          console.log('Extracted numeric sequence:', cleanedBarcode);
+        }
+      }
+      
+      // If cleaning resulted in an empty string, fall back to the original
+      if (!cleanedBarcode) {
+        console.log('Cleaning removed all characters, using original');
+        cleanedBarcode = data;
+      }
+      
+      // Use the processed barcode value
+      processedBarcode = cleanedBarcode;
+      console.log('Final processed barcode to use:', processedBarcode);
+      
+      // Validate it's a number if we're expecting numeric IDs
+      if (!processedBarcode || isNaN(parseInt(processedBarcode, 10))) {
+        console.log('Warning: Processed barcode is not a valid number');
+        
+        // Show a more informative alert
+        Alert.alert(
+          'Barcode Format Issue', 
+          `The scanned barcode (${data}) doesn't contain a recognizable student ID format.\n\nProcessed value: ${processedBarcode}`,
+          [
+            {
+              text: 'Try Again',
+              onPress: () => {
+                setIsLoading(false);
+                setShowCamera(true);
+              },
+            },
+            {
+              text: 'Use As Is',
+              onPress: () => {
+                // Continue with the original data as fallback
+                processedBarcode = data;
+              },
+            }
+          ]
+        );
+        
         setIsLoading(false);
         return;
       }
       
       // Use direct ID search since we know the barcode is the student ID
       try {
-        console.log('Searching for student with barcode ID:', cleanedBarcode);
-        const student = await api.searchStudentById(cleanedBarcode);
+        console.log('Searching for student with barcode ID:', processedBarcode);
+        const student = await api.searchStudentById(processedBarcode);
         
         if (student) {
           console.log('Found student by ID:', student);
@@ -631,7 +683,7 @@ const ScanScreen: React.FC = () => {
         } else {
           console.log('No student found with exact ID match, trying general search');
           // If exact ID search failed, try the more flexible search
-          const results = await api.searchStudents({ lrn: cleanedBarcode });
+          const results = await api.searchStudents({ lrn: processedBarcode });
           
           if (results.length === 1) {
             // One result found - select it
@@ -642,7 +694,26 @@ const ScanScreen: React.FC = () => {
             setShowSearchResults(true);
           } else {
             // No results found
-            Alert.alert('Student Not Found', `No student found with ID: ${cleanedBarcode}`);
+            Alert.alert(
+              'Student Not Found', 
+              `No student found with ID: ${processedBarcode}\n\nOriginal barcode: ${data}`,
+              [
+                {
+                  text: 'Scan Again',
+                  onPress: () => {
+                    setIsLoading(false);
+                    setShowCamera(true);
+                  },
+                },
+                {
+                  text: 'Search Manually',
+                  onPress: () => {
+                    setSearchText(processedBarcode);
+                    setSearchMode('id');
+                  },
+                }
+              ]
+            );
           }
         }
       } catch (error: any) {
@@ -660,12 +731,43 @@ const ScanScreen: React.FC = () => {
             Alert.alert('Server Error', 'Unable to process the barcode. Please try again or search manually.');
           }
         } else {
-          Alert.alert('Error', 'Failed to find student. Please try scanning again or search manually.');
+          Alert.alert(
+            'Error', 
+            `Failed to find student.\n\nOriginal barcode: ${data}\nProcessed barcode: ${processedBarcode}`,
+            [
+              {
+                text: 'Scan Again',
+                onPress: () => {
+                  setIsLoading(false);
+                  setShowCamera(true);
+                },
+              },
+              {
+                text: 'Search Manually',
+                onPress: () => {
+                  setSearchText(processedBarcode);
+                  setSearchMode('id');
+                },
+              }
+            ]
+          );
         }
       }
     } catch (error: any) {
       console.error('Error processing barcode:', error);
-      Alert.alert('Error', 'Failed to process the scanned code. Please try again.');
+      Alert.alert(
+        'Error', 
+        'Failed to process the scanned code. Please try again.',
+        [
+          {
+            text: 'Try Again',
+            onPress: () => {
+              setIsLoading(false);
+              setShowCamera(true);
+            }
+          }
+        ]
+      );
     } finally {
       setIsLoading(false);
     }
