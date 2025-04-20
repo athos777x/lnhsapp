@@ -37,9 +37,11 @@ CREATE TABLE `attendance` (
   KEY `fk_student_id` (`student_id`),
   CONSTRAINT `attendance_ibfk_1` FOREIGN KEY (`enrollment_id`) REFERENCES `enrollment` (`enrollment_id`),
   CONSTRAINT `attendance_ibfk_2` FOREIGN KEY (`schedule_id`) REFERENCES `schedule` (`schedule_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
 
 /*Data for the table `attendance` */
+
+insert  into `attendance`(`attendance_id`,`enrollment_id`,`schedule_id`,`date`,`status`,`student_id`,`student_name`,`remarks`,`subject_id`,`school_year_id`) values (1,NULL,5,'2025-04-20','A',1,'Bautista, Angel J','2025-04-20 22:05:39',1,1);
 
 /*Table structure for table `brigada_details` */
 

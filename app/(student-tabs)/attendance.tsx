@@ -123,6 +123,19 @@ export default function AttendanceScreen() {
     }
   };
 
+  const getStatusIcon = (status: string): React.ComponentProps<typeof MaterialIcons>['name'] => {
+    switch (status) {
+      case 'Present':
+        return 'check-circle';
+      case 'Absent':
+        return 'cancel';
+      case 'Late':
+        return 'access-time';
+      default:
+        return 'help';
+    }
+  };
+
   const calculatePercentage = (present: number, total: number): string => {
     return ((present / total) * 100).toFixed(1);
   };
@@ -224,6 +237,11 @@ export default function AttendanceScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      {/* Daily Attendance Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Daily Attendance</Text>
+      </View>
+
       {/* Student Info Card */}
       {studentInfo && (
         <View style={styles.studentInfoCard}>
@@ -247,11 +265,6 @@ export default function AttendanceScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
-
-      {/* Date Selector */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Daily Attendance</Text>
-      </View>
 
       <View style={styles.datePickerCard}>
         <View style={styles.dateSelector}>
@@ -321,19 +334,38 @@ export default function AttendanceScreen() {
 
         {/* Daily Subject Attendance */}
         <View style={styles.dailyAttendanceContainer}>
+          <Text style={styles.sectionTitle}>Classes</Text>
           {dailyAttendance.map((subject, index) => (
-            <View key={index} style={styles.dailyAttendanceItem}>
-              <View style={styles.subjectInfo}>
-                <Text style={styles.subjectName}>{subject.subject_name}</Text>
-                <Text style={styles.subjectTime}>{subject.time_range}</Text>
-              </View>
-              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(subject.attendance_status) }]}>
-                <Text style={styles.statusBadgeText}>{subject.attendance_status}</Text>
+            <View key={index} style={styles.dailyAttendanceCard}>
+              <View style={styles.subjectInfoContainer}>
+                <View style={styles.subjectIconContainer}>
+                  <MaterialIcons name="book" size={22} color="#28a745" />
+                </View>
+                <View style={styles.subjectInfo}>
+                  <Text style={styles.subjectName}>{subject.subject_name}</Text>
+                  <View style={styles.timeContainer}>
+                    <MaterialIcons name="access-time" size={14} color="#666" />
+                    <Text style={styles.subjectTime}>{subject.time_range}</Text>
+                  </View>
+                </View>
+                <View style={[styles.statusContainer, { backgroundColor: getStatusColor(subject.attendance_status) + '20' }]}>
+                  <MaterialIcons 
+                    name={getStatusIcon(subject.attendance_status)} 
+                    size={18} 
+                    color={getStatusColor(subject.attendance_status)} 
+                  />
+                  <Text style={[styles.statusText, { color: getStatusColor(subject.attendance_status) }]}>
+                    {subject.attendance_status}
+                  </Text>
+                </View>
               </View>
             </View>
           ))}
           {dailyAttendance.length === 0 && (
-            <Text style={styles.noDataText}>No attendance records for this date</Text>
+            <View style={styles.noDataContainer}>
+              <MaterialIcons name="event-busy" size={48} color="#ccc" />
+              <Text style={styles.noDataText}>No attendance records for this date</Text>
+            </View>
           )}
         </View>
       </View>
@@ -419,16 +451,40 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   dailyAttendanceContainer: {
-    marginTop: 16,
+    marginTop: 20,
     flex: 1,
   },
-  dailyAttendanceItem: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  dailyAttendanceCard: {
+    backgroundColor: '#fff',
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  subjectInfoContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+  },
+  subjectIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f8f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   subjectInfo: {
     flex: 1,
@@ -438,20 +494,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
-  subjectTime: {
-    fontSize: 12,
-    color: '#666',
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 12,
+  subjectTime: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 4,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
   },
-  statusBadgeText: {
-    color: '#fff',
+  statusText: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  noDataText: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 14,
+    marginTop: 12,
   },
   modalOverlay: {
     flex: 1,
@@ -502,10 +576,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
   },
-  noDataText: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 14,
-    padding: 20,
-  }
 });
