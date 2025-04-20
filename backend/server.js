@@ -644,8 +644,8 @@ app.get('/api/school-year-id/:schoolYear', (req, res) => {
 
 // Record student attendance
 app.post('/api/attendance/record', (req, res) => {
-  const { subject_id, status, student_id, student_name } = req.body;
-  console.log('Received attendance record request:', { subject_id, status, student_id, student_name });
+  const { subject_id, status, student_id, student_name, school_year_id } = req.body;
+  console.log('Received attendance record request:', { subject_id, status, student_id, student_name, school_year_id });
 
   if (!subject_id || !status || !student_id || !student_name) {
     console.log('Missing required fields:', { subject_id, status, student_id, student_name });
@@ -665,11 +665,11 @@ app.post('/api/attendance/record', (req, res) => {
     SELECT schedule_id, day 
     FROM schedule 
     WHERE subject_id = ? 
-    AND day = ? 
+    AND day LIKE ?
     AND schedule_status = 'Approved'
   `;
 
-  db.query(scheduleQuery, [subject_id, currentDay], (err, scheduleResults) => {
+  db.query(scheduleQuery, [subject_id, `%${currentDay}%`], (err, scheduleResults) => {
     if (err) {
       console.error('Database error checking schedule:', err);
       return res.status(500).json({ 
@@ -714,7 +714,7 @@ app.post('/api/attendance/record', (req, res) => {
       FROM attendance 
       WHERE schedule_id = ?
       AND student_id = ? 
-      AND DATE(date) = CURDATE()
+      AND date = CURDATE()
     `;
 
     console.log('Checking for existing record with query:', checkQuery);
@@ -737,14 +737,15 @@ app.post('/api/attendance/record', (req, res) => {
         const updateQuery = `
           UPDATE attendance 
           SET status = ?, 
-              remarks = CURRENT_TIMESTAMP 
+              remarks = CURRENT_TIMESTAMP,
+              school_year_id = ?
           WHERE attendance_id = ?
         `;
 
         console.log('Updating existing record with query:', updateQuery);
-        console.log('Update parameters:', [dbStatus, results[0].attendance_id]);
+        console.log('Update parameters:', [dbStatus, school_year_id || null, results[0].attendance_id]);
 
-        db.query(updateQuery, [dbStatus, results[0].attendance_id], (err, updateResult) => {
+        db.query(updateQuery, [dbStatus, school_year_id || null, results[0].attendance_id], (err, updateResult) => {
           if (err) {
             console.error('Database error during update:', err);
             return res.status(500).json({ 
@@ -770,14 +771,14 @@ app.post('/api/attendance/record', (req, res) => {
       } else {
         // Insert new record
         const insertQuery = `
-          INSERT INTO attendance (subject_id, schedule_id, date, status, student_id, student_name, remarks) 
-          VALUES (?, ?, NOW(), ?, ?, ?, CURRENT_TIMESTAMP)
+          INSERT INTO attendance (subject_id, schedule_id, date, status, student_id, student_name, remarks, school_year_id) 
+          VALUES (?, ?, CURDATE(), ?, ?, ?, CURRENT_TIMESTAMP, ?)
         `;
 
         console.log('Inserting new record with query:', insertQuery);
-        console.log('Insert parameters:', [subject_id, schedule_id, dbStatus, student_id, student_name]);
+        console.log('Insert parameters:', [subject_id, schedule_id, dbStatus, student_id, student_name, school_year_id || null]);
 
-        db.query(insertQuery, [subject_id, schedule_id, dbStatus, student_id, student_name], (err, insertResult) => {
+        db.query(insertQuery, [subject_id, schedule_id, dbStatus, student_id, student_name, school_year_id || null], (err, insertResult) => {
           if (err) {
             console.error('Database error during insert:', err);
             console.error('Error details:', err.message);
@@ -811,18 +812,31 @@ app.get('/api/attendance/:scheduleId/:date', (req, res) => {
   const { scheduleId, date } = req.params;
   console.log('Fetching attendance records for:', { scheduleId, date });
   
+  let formattedDate = date;
+  // Try to parse and format the date if not in YYYY-MM-DD format
+  if (date && date.includes(',')) {
+    try {
+      const dateParts = new Date(date);
+      formattedDate = dateParts.toISOString().split('T')[0];
+    } catch (e) {
+      console.error('Error parsing date:', e);
+    }
+  }
+  
+  console.log('Using formatted date:', formattedDate);
+  
   const query = `
     SELECT attendance_id, subject_id, schedule_id, student_id, student_name, status, 
-           DATE_FORMAT(date, '%Y-%m-%d') as date
+           DATE_FORMAT(date, '%Y-%m-%d') as date, school_year_id
     FROM attendance 
     WHERE (subject_id = ? OR schedule_id = ?) 
     AND DATE(date) = ?
   `;
 
   console.log('Query:', query);
-  console.log('Parameters:', [scheduleId, scheduleId, date]);
+  console.log('Parameters:', [scheduleId, scheduleId, formattedDate]);
 
-  db.query(query, [scheduleId, scheduleId, date], (err, results) => {
+  db.query(query, [scheduleId, scheduleId, formattedDate], (err, results) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ 
@@ -971,10 +985,10 @@ app.get('/api/student/attendance/:studentId/:day/:date', (req, res) => {
     LEFT JOIN subject c ON a.subject_id = c.subject_id 
     LEFT JOIN section d ON a.section_id = d.section_id 
     LEFT JOIN school_year e ON a.school_year_id = e.school_year_id 
-    WHERE a.day = ? AND a.schedule_status = 'Approved' AND b.status != ''
+    WHERE a.day LIKE ? AND a.schedule_status = 'Approved' AND b.status != ''
   `;
 
-  db.query(query, [studentId, date, day], (err, results) => {
+  db.query(query, [studentId, date, `%${day}%`], (err, results) => {
     if (err) {
       console.error('Database query error:', err);
       return res.status(500).json({ 

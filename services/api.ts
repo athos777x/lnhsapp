@@ -103,6 +103,7 @@ interface AttendanceRecord {
   status: 'present' | 'absent' | 'late';
   student_id: number;
   student_name: string;
+  school_year_id?: number;
 }
 
 interface AttendanceResponse {
@@ -113,6 +114,7 @@ interface AttendanceResponse {
     status: 'P' | 'A' | 'L';
     student_id: number;
     student_name: string;
+    school_year_id?: number;
   };
   error?: string;
 }
@@ -127,6 +129,7 @@ interface AttendanceRecordResponse {
     student_name: string;
     status: 'present' | 'absent' | 'late';
     date: string;
+    school_year_id?: number;
   }[];
   error?: string;
 }

@@ -111,7 +111,8 @@ export default function TeacherAttendance() {
 
     try {
       // Get the current date in YYYY-MM-DD format
-      const formattedDate = currentDate;
+      const today = new Date();
+      const formattedDate = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
       console.log('Fetching attendance records for date:', formattedDate);
       
       // Fetch existing attendance records for this subject and date
@@ -147,7 +148,20 @@ export default function TeacherAttendance() {
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const currentDay = days[new Date().getDay()];
       
-      if (selectedSubject.day !== currentDay) {
+      let hasScheduleToday = false;
+      if (selectedSubject.day.startsWith('[') && selectedSubject.day.endsWith(']')) {
+        try {
+          const daysArray = JSON.parse(selectedSubject.day);
+          hasScheduleToday = daysArray.includes(currentDay);
+        } catch (e) {
+          console.error('Error parsing days:', e);
+          hasScheduleToday = selectedSubject.day.includes(currentDay);
+        }
+      } else {
+        hasScheduleToday = selectedSubject.day.includes(currentDay);
+      }
+      
+      if (!hasScheduleToday) {
         showStatusMessage(`No schedule for ${selectedSubject.subject_name} on ${currentDay}`, '#dc3545');
         return;
       }
@@ -174,7 +188,8 @@ export default function TeacherAttendance() {
         subject_id: selectedSubject.subject_id,
         status,
         student_id: student.student_id,
-        student_name: student.stud_name
+        student_name: student.stud_name,
+        school_year_id: currentSchoolYear?.school_year_id
       });
 
       if (response.success) {
