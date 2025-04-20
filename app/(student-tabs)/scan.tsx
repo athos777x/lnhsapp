@@ -1,127 +1,24 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
-// Code128 character set B encoding (includes numbers and uppercase letters)
-const CODE128_SET_B = {
-  START: [true, true, false, true, true, false, false, true, true, false, false], // Start character for Code128B
-  STOP: [true, true, false, true, true, false, false, true, true, true, false, true, true], // Stop character
-  QUIET: [false, false, false, false, false, false, false, false, false, false], // Quiet zone - increased width
-};
-
-// Function to calculate Code128 checksum
-const calculateChecksum = (value: string) => {
-  let sum = 104; // Start B value
-  for (let i = 0; i < value.length; i++) {
-    sum += (value.charCodeAt(i) - 32) * (i + 1);
-  }
-  return sum % 103;
-};
-
-// Function to encode a single character in Code128B
-const encodeChar = (char: string): boolean[] => {
-  // Code128B encoding patterns for ASCII values 32-127
-  const patterns: { [key: string]: boolean[] } = {
-    // Standard Code128B patterns (these follow proper Code128B spec)
-    ' ': [true, true, false, true, true, false, false, true, false, false, false], // space (ASCII 32)
-    '!': [true, true, false, true, true, false, false, false, true, false, false],
-    '"': [true, true, false, true, true, false, false, false, false, true, false],
-    '#': [true, true, false, true, true, false, false, false, false, false, true],
-    '$': [true, true, false, false, true, true, false, false, true, false, false],
-    '%': [true, true, false, false, true, true, false, false, false, true, false],
-    '&': [true, true, false, false, true, true, false, false, false, false, true],
-    '\'': [true, true, false, false, false, true, true, false, false, true, false],
-    '(': [true, true, false, false, false, true, true, false, false, false, true],
-    ')': [true, true, false, false, false, false, true, true, false, false, true],
-    '*': [true, true, false, true, false, false, true, true, false, false, false],
-    '+': [true, true, false, false, true, false, true, true, false, false, false],
-    ',': [true, true, false, false, false, true, false, true, true, false, false],
-    '-': [true, true, false, false, false, false, true, false, true, true, false],
-    '.': [true, true, false, false, false, false, false, true, false, true, true],
-    '/': [true, true, false, true, false, false, false, true, false, true, false],
-    '0': [true, false, false, true, true, false, false, true, false, false, true],
-    '1': [true, false, false, true, false, false, true, true, false, true, false], // Corrected pattern for '1'
-    '2': [true, false, false, true, false, false, false, true, true, false, true],
-    '3': [true, false, true, true, true, false, false, true, false, false, false],
-    '4': [true, false, true, false, false, true, true, true, false, false, false],
-    '5': [true, false, false, false, true, true, true, false, true, false, false],
-    '6': [true, false, false, false, false, true, true, true, false, true, false],
-    '7': [true, false, true, true, false, false, false, true, true, false, false],
-    '8': [true, false, true, false, true, true, false, false, true, false, false],
-    '9': [true, false, false, true, true, true, false, true, false, false, false],
+// Use the TEC-IT barcode generator service
+const BarcodeImage = ({ value }: { value: string }) => {
+  // Generate a URL to the barcode service
+  const getBarcodeUrl = (studentId: string) => {
+    // Construct the URL to the TEC-IT barcode service
+    return `https://barcode.tec-it.com/barcode.ashx?data=${studentId}&code=Code128&translate-esc=on&dpi=96&height=30&width=50&quietzone=0`;
   };
-  
-  // If the character pattern doesn't exist, use a default pattern that's scannable
-  if (!patterns[char]) {
-    console.warn(`No encoding pattern for character: '${char}', using default`);
-    return patterns['0']; // Default to '0' pattern
-  }
-  
-  return patterns[char];
-};
 
-// Function to generate Code128B barcode data
-const generateBarcodeData = (value: string) => {
-  // Pad single-digit IDs with leading zeros to improve scanning reliability
-  let paddedValue = value;
-  if (paddedValue.length === 1) {
-    paddedValue = '000000' + paddedValue;
-  } else if (paddedValue.length < 8) {
-    // Pad to have a reasonable length for better scanning
-    paddedValue = paddedValue.padStart(8, '0');
-  }
-  
-  console.log('Generating barcode for:', paddedValue);
-  
-  const result: boolean[] = [];
-  
-  // Add quiet zone
-  result.push(...CODE128_SET_B.QUIET);
-  
-  // Add start character
-  result.push(...CODE128_SET_B.START);
-  
-  // Encode each character
-  for (const char of paddedValue) {
-    result.push(...encodeChar(char));
-  }
-  
-  // Add checksum
-  const checksum = calculateChecksum(paddedValue);
-  result.push(...encodeChar(String.fromCharCode(checksum + 32))); // Correct checksum encoding
-  
-  // Add stop character
-  result.push(...CODE128_SET_B.STOP);
-  
-  // Add quiet zone
-  result.push(...CODE128_SET_B.QUIET);
-  
-  return result;
-};
-
-// Simple Barcode component using Views
-const Barcode = ({ value }: { value: string }) => {
-  const barcodeData = generateBarcodeData(value);
-  
   return (
-    <View style={styles.barcodeContainer}>
-      <View style={styles.barcodeRow}>
-        {barcodeData.map((isBar, index) => (
-          <View
-            key={index}
-            style={[
-              styles.barcodeBar,
-              { 
-                backgroundColor: isBar ? '#000' : '#fff',
-                width: 2, // Slightly wider bars for better scanning
-              }
-            ]}
-          />
-        ))}
-      </View>
-      <Text style={styles.barcodeText}>{value.padStart(8, '0')}</Text>
+    <View style={styles.barcodeWrapper}>
+      <Image
+        source={{ uri: getBarcodeUrl(value) }}
+        style={styles.barcodeImage}
+        resizeMode="contain"
+      />
     </View>
   );
 };
@@ -137,7 +34,8 @@ export default function ScanScreen() {
         try {
           const userDetails = await api.getUserDetails(userData.userId);
           if (userDetails.student_id) {
-            setStudentId(userDetails.student_id.toString());
+            const id = userDetails.student_id.toString();
+            setStudentId(id);
           }
         } catch (error) {
           console.error('Error fetching student ID:', error);
@@ -158,6 +56,9 @@ export default function ScanScreen() {
     );
   }
 
+  // Pad the student ID to ensure it's at least 8 characters (for better scanning)
+  const paddedStudentId = studentId.padStart(8, '0');
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -166,8 +67,11 @@ export default function ScanScreen() {
         </View>
         <View style={styles.idCard}>
           <MaterialIcons name="person" size={40} color="#28a745" />
-          <Text style={styles.idNumber}>{studentId}</Text>
-          <Barcode value={studentId} />
+          <Text style={styles.idNumber}>{paddedStudentId}</Text>
+          
+          <View style={styles.barcodeContainer}>
+            <BarcodeImage value={paddedStudentId} />
+          </View>
         </View>
         <View style={styles.divider} />
         <Text style={styles.instruction}>Show this ID/barcode to your teacher</Text>
@@ -227,32 +131,38 @@ const styles = StyleSheet.create({
   },
   barcodeContainer: {
     marginTop: 10,
-    padding: 16,
+    padding: 0,
     backgroundColor: '#fff',
     alignItems: 'center',
     width: '100%',
     borderRadius: 8,
   },
-  barcodeRow: {
-    flexDirection: 'row',
-    height: 80,
+  barcodeWrapper: {
     alignItems: 'center',
-    marginBottom: 8,
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    width: '100%',
   },
-  barcodeBar: {
-    width: 2, // Made wider for better scanning
-    height: '100%',
+  barcodeImage: {
+    width: 260,
+    height: 120,
   },
   barcodeText: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 8, 
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#333',
+    marginTop: 8,
+  },
+  attribution: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 4,
   },
   divider: {
     height: 1,
     backgroundColor: '#e9ecef',
-    width: '100%',
     marginVertical: 20,
+    width: '100%',
   },
   instruction: {
     fontSize: 16,
